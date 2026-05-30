@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand: #ff4e00;
+  --color-brand-light: #ff7235;
+  --color-brand-dark: #c83d00;
+  --color-brand-transparent: rgba(255, 78, 0, 0.15);
+  --color-brand-solid: #ff4e00;
+}
+
+/* Custom gorgeous neon glow rules and scrollbar overrides */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 78, 0, 0.3);
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 78, 0, 0.6);
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
