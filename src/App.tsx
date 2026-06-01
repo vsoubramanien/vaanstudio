@@ -462,7 +462,7 @@ export default function App() {
       {/* Invisible HTML5 Audio back-end engine */}
       <audio
         ref={audioRef}
-        src={currentTrack?.src || ""}
+        src={currentTrack?.src || undefined}
         crossOrigin="anonymous"
         onTimeUpdate={() => {
           if (audioRef.current) {
