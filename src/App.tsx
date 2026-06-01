@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SAMPLE_TRACKS } from "./data/sampleTracks";
 import { Track } from "./types";
+import vaanLogo from "./assets/images/vaan_logo_1780250156730.png";
 import AudioVisualizer from "./components/AudioVisualizer";
 import EqualizerPanel from "./components/EqualizerPanel";
 import SyncedLyrics from "./components/SyncedLyrics";
@@ -481,7 +482,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand/35 bg-brand/5 flex items-center justify-center shrink-0">
             <img
-              src="/src/assets/images/vaan_logo_1780250156730.png"
+              src={vaanLogo}
               alt="Vaan Logo"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"

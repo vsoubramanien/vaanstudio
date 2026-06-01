@@ -1,4 +1,7 @@
 import { Track } from "../types";
+import neonHorizonsArt from "../assets/images/neon_horizons_art_1780150767926.png";
+import midnightDriveArt from "../assets/images/midnight_drive_art_1780150785567.png";
+import goldenWhispersArt from "../assets/images/golden_whispers_art_1780150804453.png";
 
 export const SAMPLE_TRACKS: Track[] = [
   {
@@ -8,7 +11,7 @@ export const SAMPLE_TRACKS: Track[] = [
     album: "Retro Future (2026)",
     duration: 502, // 8:22 minutes of beautiful SoundHelix Song 1
     src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    coverUrl: "/src/assets/images/neon_horizons_art_1780150767926.png",
+    coverUrl: neonHorizonsArt,
     lyrics: "Neon Horizons - Lyrics\n\nWalking down the neon light avenue\nShadows dance under a twilight blue\nThe gear in motion, the network screams\nBuilding a world out of digital dreams\nAnd we fly... through the electric sky\nNo boundaries, just you and I\nAnalog pulses through the code we write\nChasing tomorrow in the pulse of the night\nTurn the volume up, feel the bass expand\nWelcome to the future, holding the master plan.",
     syncedLyrics: [
       { time: 0, text: "🎵 [Ambient Retro Synth Intro] 🎵" },
@@ -44,7 +47,7 @@ export const SAMPLE_TRACKS: Track[] = [
     album: "Overdrive",
     duration: 425, // 7:05 minutes of beautiful SoundHelix Song 2
     src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    coverUrl: "/src/assets/images/midnight_drive_art_1780150785567.png",
+    coverUrl: midnightDriveArt,
     lyrics: "Midnight Drive - Lyrics\n\nHeadlights flashing through the mountain pass\nWatching reflections in the windshield glass\nThe engine purrs, the gears align\nCruising the highway past the border line\nFeel the equalizer, clear and bright\nGuiding our tires through the infinite night\nInto the twilight, we race the sun\nOur journey together has only begun.",
     syncedLyrics: [
       { time: 0, text: "🎵 [Progressive Beats and Bass Intro] 🎵" },
@@ -70,7 +73,7 @@ export const SAMPLE_TRACKS: Track[] = [
     album: "Woodland Echoes",
     duration: 302, // 5:02 minutes of beautiful SoundHelix Song 4
     src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    coverUrl: "/src/assets/images/golden_whispers_art_1780150804453.png",
+    coverUrl: goldenWhispersArt,
     lyrics: "Golden Whispers - Lyrics\n\nA whisper of wind in the autumn trees\nCarrying secrets on a golden breeze\nWe listen close to the acoustic sound\nWith leaves of copper scattered on the ground\nTake a deep breath and let it go\nTime moves fast, but the music stays slow.",
     syncedLyrics: [
       { time: 0, text: "🎵 [Soft Ambient Chime Wave Intro] 🎵" },
