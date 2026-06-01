@@ -1,4 +1,4 @@
-package com.acousticdsp.musicplayer;
+package com.vaan.musicplayer;
 
 import com.getcapacitor.BridgeActivity;
 

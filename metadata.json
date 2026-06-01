@@ -1,5 +1,5 @@
 {
-  "name": "Music Player",
+  "name": "VaanMusicPlayer",
   "description": "A fully functional mobile-responsive music player featuring a live equalizer, synced lyrics, custom audio uploader (.mp3, .flac, etc.), and media controls.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

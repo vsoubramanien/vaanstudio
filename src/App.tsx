@@ -31,6 +31,24 @@ import {
   Info
 } from "lucide-react";
 
+// Generate a synthetic, exponentially decaying stereo impulse response for the reverb convolver
+function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay: number = 2.0): AudioBuffer {
+  const sampleRate = ctx.sampleRate;
+  const length = Math.max(1, Math.round(sampleRate * duration));
+  const impulse = ctx.createBuffer(2, length, sampleRate);
+  const left = impulse.getChannelData(0);
+  const right = impulse.getChannelData(1);
+  for (let i = 0; i < length; i++) {
+    const percent = i / length;
+    // Declining random noise with exponential decay
+    const valLeft = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
+    const valRight = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
+    left[i] = valLeft;
+    right[i] = valRight;
+  }
+  return impulse;
+}
+
 export default function App() {
   // State definitions
   const [tracks, setTracks] = useState<Track[]>(SAMPLE_TRACKS);
@@ -44,10 +62,17 @@ export default function App() {
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
   const [layoutMode, setLayoutMode] = useState<"mobile" | "dashboard">("mobile");
   
-  // Equalizer gains corresponding to [60, 230, 910, 4000, 14000] Hz
-  const [gains, setGains] = useState<number[]>([0, 0, 0, 0, 0]);
+  // Equalizer gains corresponding to [40, 125, 400, 1000, 2500, 6000, 15000] Hz
+  const [gains, setGains] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [visualizerTheme, setVisualizerTheme] = useState<"neon" | "sunset" | "matrix" | "monochrome">("neon");
+  const [visualizerStyle, setVisualizerStyle] = useState<"bars" | "radial" | "grid" | "oscilloscope">("bars");
   const [mobileTab, setMobileTab] = useState<"player" | "lyrics" | "eq" | "playlist">("player");
+
+  // Expanded DSP FX States
+  const [bassBoost, setBassBoost] = useState<number>(0); // 0 to 12 dB
+  const [reverbWet, setReverbWet] = useState<number>(0); // 0.0 to 1.0 (wet level)
+  const [reverbSize, setReverbSize] = useState<number>(2.0); // 0.5 to 4.0 seconds field size
+  const [pan, setPan] = useState<number>(0); // -1.0 (L) to 1.0 (R)
 
   // System Clock for Android status bar
   const [sysTime, setSysTime] = useState("14:18");
@@ -59,6 +84,13 @@ export default function App() {
   const filtersRef = useRef<BiquadFilterNode[]>([]);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
+  // Expanded DSP Node References
+  const bassBoostRef = useRef<BiquadFilterNode | null>(null);
+  const convolverRef = useRef<ConvolverNode | null>(null);
+  const wetGainRef = useRef<GainNode | null>(null);
+  const dryGainRef = useRef<GainNode | null>(null);
+  const pannerRef = useRef<StereoPannerNode | null>(null);
 
   // Active track helper
   const currentTrack = tracks.find((t) => t.id === currentTrackId) || tracks[0];
@@ -90,8 +122,15 @@ export default function App() {
         const source = ctx.createMediaElementSource(audioRef.current);
         sourceNodeRef.current = source;
 
-        // Build 5-band Equalizer chain (Peaking filters)
-        const frequencies = [60, 230, 910, 4000, 14000];
+        // 1. Create Bass Boost Bass Node (lowshelf filter)
+        const bassBoostNode = ctx.createBiquadFilter();
+        bassBoostNode.type = "lowshelf";
+        bassBoostNode.frequency.value = 100; // Bass-frequency limit
+        bassBoostNode.gain.value = bassBoost;
+        bassBoostRef.current = bassBoostNode;
+
+        // 2. Build 7-band Equalizer chain (Peaking filters)
+        const frequencies = [40, 125, 400, 1000, 2500, 6000, 15000];
         const filters = frequencies.map((freq, idx) => {
           const filter = ctx.createBiquadFilter();
           filter.type = "peaking";
@@ -102,21 +141,59 @@ export default function App() {
         });
         filtersRef.current = filters;
 
+        // 3. Create Reverb convolver block: convolverNode, wetGainNode, dryGainNode
+        const convolver = ctx.createConvolver();
+        try {
+          convolver.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0);
+        } catch (e) {
+          console.error("Failed to generate reverb impulse buffer during init:", e);
+        }
+        convolverRef.current = convolver;
+
+        const wetGainNode = ctx.createGain();
+        wetGainNode.gain.value = reverbWet;
+        wetGainRef.current = wetGainNode;
+
+        const dryGainNode = ctx.createGain();
+        dryGainNode.gain.value = 1.0 - reverbWet * 0.3;
+        dryGainRef.current = dryGainNode;
+
         // Create AnalyserNode for audio visualization
         const analyserNode = ctx.createAnalyser();
         analyserNode.fftSize = 256;
         analyserRef.current = analyserNode;
         setAnalyser(analyserNode);
 
-        // Chain the connections together
-        // source -> f[0] -> f[1] -> f[2] -> f[3] -> f[4] -> analyser -> destination (speakers)
-        let previousNode: AudioNode = source;
+        // Connections:
+        // source -> bassBoostNode -> filter[0] -> ... -> filter[4]
+        source.connect(bassBoostNode);
+
+        let previousNode: AudioNode = bassBoostNode;
         filters.forEach((filter) => {
           previousNode.connect(filter);
           previousNode = filter;
         });
 
-        previousNode.connect(analyserNode);
+        // Split standard signal to reverb (convolver -> wetGainNode) and dry path (dryGainNode)
+        const eqOutput = previousNode;
+        eqOutput.connect(dryGainNode);
+        eqOutput.connect(convolver);
+        convolver.connect(wetGainNode);
+
+        // Setup Panner (StereoPannerNode) conditionally
+        if (ctx.createStereoPanner) {
+          const panner = ctx.createStereoPanner();
+          panner.pan.value = pan;
+          pannerRef.current = panner;
+
+          dryGainNode.connect(panner);
+          wetGainNode.connect(panner);
+          panner.connect(analyserNode);
+        } else {
+          dryGainNode.connect(analyserNode);
+          wetGainNode.connect(analyserNode);
+        }
+
         analyserNode.connect(ctx.destination);
       } catch (err) {
         console.error("Failed to construct Web Audio graph: ", err);
@@ -131,12 +208,48 @@ export default function App() {
 
   // Sync EQ BiquadFilter gains dynamically with state updates
   useEffect(() => {
-    if (filtersRef.current.length === 5) {
+    if (filtersRef.current.length === 7) {
       filtersRef.current.forEach((filter, idx) => {
         filter.gain.setValueAtTime(gains[idx], audioCtxRef.current?.currentTime || 0);
       });
     }
   }, [gains]);
+
+  // Sync Bass Boost dynamically with state updates
+  useEffect(() => {
+    if (bassBoostRef.current) {
+      bassBoostRef.current.gain.setValueAtTime(bassBoost, audioCtxRef.current?.currentTime || 0);
+    }
+  }, [bassBoost]);
+
+  // Sync Stereo Pan dynamically with state updates
+  useEffect(() => {
+    if (pannerRef.current) {
+      pannerRef.current.pan.setValueAtTime(pan, audioCtxRef.current?.currentTime || 0);
+    }
+  }, [pan]);
+
+  // Sync Reverb wet level (wet mix) dynamically with state updates
+  useEffect(() => {
+    if (wetGainRef.current) {
+      wetGainRef.current.gain.setValueAtTime(reverbWet, audioCtxRef.current?.currentTime || 0);
+    }
+    if (dryGainRef.current) {
+      dryGainRef.current.gain.setValueAtTime(1.0 - reverbWet * 0.3, audioCtxRef.current?.currentTime || 0);
+    }
+  }, [reverbWet]);
+
+  // Sync Reverb size / decay (impulse buffer regen) dynamically with state updates
+  useEffect(() => {
+    const ctx = audioCtxRef.current;
+    if (ctx && convolverRef.current) {
+      try {
+        convolverRef.current.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0);
+      } catch (err) {
+        console.warn("Failed to update convolver buffer dynamically:", err);
+      }
+    }
+  }, [reverbSize]);
 
   // Adjust audio element properties when state triggers
   useEffect(() => {
@@ -366,17 +479,19 @@ export default function App() {
       {/* Navigation Top Header Dashboard */}
       <header className="max-w-7xl w-full mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/40 pb-4 mb-6 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-brand/10 border border-brand/35 text-brand-light">
-            <Music className="w-6 h-6 animate-pulse" />
+          <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand/35 bg-brand/5 flex items-center justify-center shrink-0">
+            <img
+              src="/src/assets/images/vaan_logo_1780250156730.png"
+              alt="Vaan Logo"
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-xl font-bold tracking-tight text-white font-display">
-                Acoustic DSP Studio
+                VaanMusicPlayer
               </h1>
-              <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold inline-flex items-center gap-0.5 animate-bounce">
-                <Flame className="w-2.5 h-2.5" /> android native
-              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
               Real-time WebAudio Equalization & Sync Lyrics
@@ -386,6 +501,25 @@ export default function App() {
 
         {/* Viewport Toggles and Visualizer Themes */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Visualizer Style Picker */}
+          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
+            <span className="text-[10px] text-slate-500 font-mono px-2">STYLE:</span>
+            {(["bars", "radial", "grid", "oscilloscope"] as const).map((st) => (
+              <button
+                key={st}
+                id={`vis-style-${st}`}
+                onClick={() => setVisualizerStyle(st)}
+                className={`px-2 py-1 rounded-lg capitalize transition-all text-[11px] ${
+                  visualizerStyle === st
+                    ? "bg-slate-800 text-brand-light border border-slate-700/60 font-semibold"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                {st === "bars" ? "spectrum" : st === "radial" ? "radial" : st === "grid" ? "3D grid" : "oscilloscope"}
+              </button>
+            ))}
+          </div>
+
           {/* Visualizer theme Picker */}
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
             <span className="text-[10px] text-slate-500 font-mono px-2">THEME:</span>
@@ -516,6 +650,7 @@ export default function App() {
                         analyser={analyser}
                         isPlaying={isPlaying}
                         visualizerTheme={visualizerTheme}
+                        visualizerStyle={visualizerStyle}
                       />
                     </div>
 
@@ -699,6 +834,14 @@ export default function App() {
                       gains={gains}
                       onGainChange={handleGainChange}
                       onPresetSelect={handlePresetSelect}
+                      bassBoost={bassBoost}
+                      onBassBoostChange={setBassBoost}
+                      reverbWet={reverbWet}
+                      onReverbWetChange={setReverbWet}
+                      reverbSize={reverbSize}
+                      onReverbSizeChange={setReverbSize}
+                      pan={pan}
+                      onPanChange={setPan}
                     />
                   </div>
                 )}
@@ -854,6 +997,7 @@ export default function App() {
                   analyser={analyser}
                   isPlaying={isPlaying}
                   visualizerTheme={visualizerTheme}
+                  visualizerStyle={visualizerStyle}
                 />
               </div>
 
@@ -995,6 +1139,14 @@ export default function App() {
                   gains={gains}
                   onGainChange={handleGainChange}
                   onPresetSelect={handlePresetSelect}
+                  bassBoost={bassBoost}
+                  onBassBoostChange={setBassBoost}
+                  reverbWet={reverbWet}
+                  onReverbWetChange={setReverbWet}
+                  reverbSize={reverbSize}
+                  onReverbSizeChange={setReverbSize}
+                  pan={pan}
+                  onPanChange={setPan}
                 />
               </div>
 
@@ -1022,18 +1174,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Humble Technical Help footer area */}
-      <footer className="max-w-7xl w-full mx-auto mt-auto pt-6 border-t border-slate-800/40 text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-4 select-none shrink-0 border-transparent">
-        <span className="flex items-center gap-1">
-          <Info className="w-3.5 h-3.5 text-brand" />
-          Tip: You can drag in local <b>.mp3</b> or <b>.flac</b> media to populate your personalized library.
-        </span>
-        <div className="text-[10px] uppercase font-mono tracking-wider flex items-center gap-2">
-          <span>HTML5 WebAudio Context</span>
-          <span>•</span>
-          <span className="text-brand-light font-bold">2026 Edition</span>
-        </div>
-      </footer>
+
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.acousticdsp.musicplayer',
-  appName: 'Acoustic DSP Studio',
+  appId: 'com.vaan.musicplayer',
+  appName: 'VaanMusicPlayer',
   webDir: 'dist',
   server: {
     androidScheme: 'https'

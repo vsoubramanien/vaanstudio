@@ -18,5 +18,5 @@ export interface Track {
 
 export interface EqualizerPreset {
   name: string;
-  gains: number[]; // Array of 5 gains for frequencies: 60Hz, 230Hz, 910Hz, 4kHz, 14kHz
+  gains: number[]; // Array of 7 gains for frequencies: 40Hz, 125Hz, 400Hz, 1kHz, 2.5kHz, 6kHz, 15kHz
 }

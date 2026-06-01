@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Acoustic DSP Studio</string>
-    <string name="title_activity_main">Acoustic DSP Studio</string>
-    <string name="package_name">com.acousticdsp.musicplayer</string>
-    <string name="custom_url_scheme">com.acousticdsp.musicplayer</string>
+    <string name="app_name">VaanMusicPlayer</string>
+    <string name="title_activity_main">VaanMusicPlayer</string>
+    <string name="package_name">com.vaan.musicplayer</string>
+    <string name="custom_url_scheme">com.vaan.musicplayer</string>
 </resources>
