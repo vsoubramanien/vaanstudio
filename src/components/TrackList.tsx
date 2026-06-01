@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Track } from "../types";
-import { Music, Play, AudioLines, FileDown, Trash2, PlusCircle, Sparkles, Plus } from "lucide-react";
+import { Music, Play, AudioLines, FileDown, Trash2, PlusCircle } from "lucide-react";
 
 interface TrackListProps {
   tracks: Track[];
@@ -22,48 +22,6 @@ export default function TrackList({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // AI Discovery State variables
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
-
-  const handleSearchAndAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-
-    setIsSearching(true);
-    setSearchError("");
-    try {
-      const response = await fetch("/api/search-song", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery }),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to search and generate songs.");
-      }
-      const data = await response.json();
-      setSearchResults(data);
-    } catch (err: any) {
-      console.error(err);
-      setSearchError("Unable to discover songs. Let's try another search term!");
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const handleAddSearchResult = (track: Track) => {
-    onTrackUpload(track);
-    // Select and activate new track automatically
-    onTrackSelect(track.id);
-    // Filter from results of the search
-    setSearchResults(prev => prev.filter(t => t.id !== track.id));
-    if (searchResults.length <= 1) {
-      setSearchQuery("");
-    }
-  };
 
   // Format seconds to mm:ss
   const formatTime = (secs: number) => {
@@ -157,88 +115,6 @@ export default function TrackList({
           {tracks.length} {tracks.length === 1 ? "Track" : "Tracks"}
         </span>
       </div>
-
-      {/* AI Song Discovery Search */}
-      <div className="flex flex-col gap-2.5 bg-slate-950/45 border border-slate-800/50 p-3 rounded-2xl">
-        <form onSubmit={handleSearchAndAdd} className="flex gap-2 items-center">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="Search or suggest a song (e.g. Tamil Sky, Neon Lofi...)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-950/75 border border-slate-800/80 focus:border-brand/50 rounded-xl pl-3 pr-8 py-2 text-xs text-slate-100 placeholder-slate-500 outline-none transition-all"
-            />
-            <Sparkles className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand opacity-60 animate-pulse pointer-events-none" />
-          </div>
-          <button
-            type="submit"
-            disabled={isSearching || !searchQuery.trim()}
-            className="px-3.5 py-2 rounded-xl bg-brand hover:bg-brand-light text-white text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1 shrink-0"
-          >
-            {isSearching ? (
-              <>
-                <div className="w-3 h-3 rounded-full border border-white border-t-transparent animate-spin shrink-0" />
-                <span>Searching</span>
-              </>
-            ) : (
-              <span>Search & Add</span>
-            )}
-          </button>
-        </form>
-
-        {searchError && (
-          <p className="text-[10px] text-rose-450 font-medium px-1 leading-normal">
-            {searchError}
-          </p>
-        )}
-
-        {/* Dynamic Search Results list */}
-        {searchResults.length > 0 && (
-          <div className="flex flex-col gap-2 mt-1 border-t border-slate-800/40 pt-2 animate-fadeIn">
-            <div className="flex items-center justify-between px-1 mb-1">
-              <span className="text-[9px] font-mono text-brand-light uppercase tracking-wider font-semibold">AI Discoveries</span>
-              <button
-                type="button"
-                onClick={() => setSearchResults([])}
-                className="text-[9px] text-slate-400 hover:text-white transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="flex flex-col gap-1.5 max-h-[140px] overflow-y-auto scrollbar-none">
-              {searchResults.map((result) => (
-                <div
-                  key={result.id}
-                  className="flex items-center justify-between p-1.5 rounded-xl bg-slate-950/60 border border-slate-800/50 hover:border-slate-800 transition-all text-xs"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <img
-                      src={result.coverUrl}
-                      alt={result.title}
-                      referrerPolicy="no-referrer"
-                      className="w-8 h-8 object-cover rounded-lg border border-slate-800 shrink-0 select-none"
-                    />
-                    <div className="min-w-0 flex flex-col justify-center">
-                      <h5 className="font-semibold text-slate-200 truncate leading-tight">{result.title}</h5>
-                      <p className="text-[9px] text-slate-400 truncate mt-0.5">{result.artist} • {result.album}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAddSearchResult(result)}
-                    className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white text-emerald-400 font-mono text-[10px] font-bold cursor-pointer transition-all flex items-center gap-0.5 shrink-0"
-                    title="Add this song with synced lyrics & cover art"
-                  >
-                    <Plus className="w-3 h-3" /> Add
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Playlist Grid Scrolling */}
       <div className="max-h-[220px] overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
         {tracks.map((track) => {

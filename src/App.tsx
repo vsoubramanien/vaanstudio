@@ -53,10 +53,10 @@ function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay:
 export default function App() {
   // State definitions
   const [tracks, setTracks] = useState<Track[]>(SAMPLE_TRACKS);
-  const [currentTrackId, setCurrentTrackId] = useState<string>("1");
+  const [currentTrackId, setCurrentTrackId] = useState<string>(SAMPLE_TRACKS[0]?.id || "");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
-  const [duration, setDuration] = useState<number>(SAMPLE_TRACKS[0].duration);
+  const [duration, setDuration] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0.8);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("all");
@@ -462,7 +462,7 @@ export default function App() {
       {/* Invisible HTML5 Audio back-end engine */}
       <audio
         ref={audioRef}
-        src={currentTrack.src}
+        src={currentTrack?.src || ""}
         crossOrigin="anonymous"
         onTimeUpdate={() => {
           if (audioRef.current) {
@@ -620,8 +620,8 @@ export default function App() {
                           isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
                         }`}>
                           <img
-                            src={currentTrack.coverUrl}
-                            alt={currentTrack.title}
+                            src={currentTrack?.coverUrl || vaanLogo}
+                            alt={currentTrack?.title || "Vaan Music Player"}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover select-none"
                           />
@@ -638,10 +638,16 @@ export default function App() {
                     {/* Track metadata titles */}
                     <div className="text-center">
                       <h2 className="text-lg font-bold tracking-tight text-white select-text font-display">
-                        {currentTrack.title}
+                        {currentTrack?.title || "Library is empty"}
                       </h2>
                       <p className="text-xs text-brand-light font-medium tracking-wide mt-1 select-text">
-                        {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
+                        {currentTrack ? (
+                          <>
+                            {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
+                          </>
+                        ) : (
+                          "Switch to 'Tracks' below to add songs"
+                        )}
                       </p>
                     </div>
 
@@ -820,11 +826,19 @@ export default function App() {
                 {/* Sub-panels: Lyrics inside mobile scroll */}
                 {mobileTab === "lyrics" && (
                   <div className="flex-1 flex flex-col pt-1">
-                    <SyncedLyrics
-                      track={currentTrack}
-                      currentTime={currentTime}
-                      onLyricsUpdate={handleLyricsUpdate}
-                    />
+                    {currentTrack ? (
+                      <SyncedLyrics
+                        track={currentTrack}
+                        currentTime={currentTime}
+                        onLyricsUpdate={handleLyricsUpdate}
+                      />
+                    ) : (
+                      <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 h-[280px]">
+                        <Music className="w-8 h-8 text-slate-500 animate-pulse" />
+                        <span className="text-sm font-semibold">No track selected</span>
+                        <span className="text-xs text-slate-500">Add some tracks to view synced or custom lyrics</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -936,8 +950,8 @@ export default function App() {
                       isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
                     }`}>
                       <img
-                        src={currentTrack.coverUrl}
-                        alt={currentTrack.title}
+                        src={currentTrack?.coverUrl || vaanLogo}
+                        alt={currentTrack?.title || "Vaan Music Player"}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover select-none"
                       />
@@ -951,10 +965,16 @@ export default function App() {
                   {/* Metadata display */}
                   <div className="text-center w-full">
                     <h2 className="text-xl font-bold tracking-tight text-white line-clamp-1 select-text font-display">
-                      {currentTrack.title}
+                      {currentTrack?.title || "Library is empty"}
                     </h2>
                     <p className="text-xs text-brand-light font-medium tracking-wide mt-1 select-text">
-                      {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
+                      {currentTrack ? (
+                        <>
+                          {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
+                        </>
+                      ) : (
+                        "Upload tracks below to build library"
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1154,11 +1174,19 @@ export default function App() {
               {/* Lyrics Panel + Upload-Playlist Panel bottom Row Side by Side */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
                 {/* Apple-music-like Synced Lyrics Module */}
-                <SyncedLyrics
-                  track={currentTrack}
-                  currentTime={currentTime}
-                  onLyricsUpdate={handleLyricsUpdate}
-                />
+                {currentTrack ? (
+                  <SyncedLyrics
+                    track={currentTrack}
+                    currentTime={currentTime}
+                    onLyricsUpdate={handleLyricsUpdate}
+                  />
+                ) : (
+                  <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 h-[280px]">
+                    <Music className="w-8 h-8 text-slate-500 animate-pulse" />
+                    <span className="text-sm font-semibold">No track loaded</span>
+                    <span className="text-xs text-slate-500">Drag and drop tracks into the list on the right</span>
+                  </div>
+                )}
 
                 {/* Audio library uploader module */}
                 <TrackList
