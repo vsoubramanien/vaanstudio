@@ -7,7 +7,7 @@ interface TrackListProps {
   currentTrackId: string;
   isPlaying: boolean;
   onTrackSelect: (trackId: string) => void;
-  onTrackUpload: (track: Track) => void;
+  onTrackUpload: (track: Track, file: File) => void;
   onTrackDelete: (trackId: string) => void;
 }
 
@@ -81,7 +81,7 @@ export default function TrackList({
         isUploaded: true,
       };
 
-      onTrackUpload(newTrack);
+      onTrackUpload(newTrack, file);
     }
     setIsProcessing(false);
   };

@@ -6,6 +6,11 @@ import AudioVisualizer from "./components/AudioVisualizer";
 import EqualizerPanel from "./components/EqualizerPanel";
 import SyncedLyrics from "./components/SyncedLyrics";
 import TrackList from "./components/TrackList";
+import {
+  saveTrackToDB,
+  deleteTrackFromDB,
+  getAllTracksFromDB
+} from "./utils/db";
 
 // Icon imports
 import {
@@ -108,6 +113,40 @@ export default function App() {
     const timer = setInterval(updateTime, 1000 * 30);
     return () => clearInterval(timer);
   }, []);
+
+  // Restore persisted tracks list and selection on mount
+  useEffect(() => {
+    const loadPersistedTracks = async () => {
+      try {
+        const persistedTracks = await getAllTracksFromDB();
+        if (persistedTracks && persistedTracks.length > 0) {
+          setTracks(persistedTracks);
+          const savedTrackId = localStorage.getItem("currentTrackId");
+          if (savedTrackId && persistedTracks.some((t) => t.id === savedTrackId)) {
+            setCurrentTrackId(savedTrackId);
+          } else {
+            setCurrentTrackId(persistedTracks[0].id);
+          }
+        } else {
+          setTracks(SAMPLE_TRACKS);
+          if (SAMPLE_TRACKS.length > 0) {
+            setCurrentTrackId(SAMPLE_TRACKS[0].id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load tracks from DB on startup:", err);
+        setTracks(SAMPLE_TRACKS);
+      }
+    };
+    loadPersistedTracks();
+  }, []);
+
+  // Save currentTrackId to localStorage on change
+  useEffect(() => {
+    if (currentTrackId) {
+      localStorage.setItem("currentTrackId", currentTrackId);
+    }
+  }, [currentTrackId]);
 
   // Web Audio Context initialization (bypassing browser blocks via click)
   const initAudioEngine = () => {
@@ -396,8 +435,11 @@ export default function App() {
   };
 
   // Custom tracks add handlings
-  const handleTrackUpload = (newTrack: Track) => {
+  const handleTrackUpload = (newTrack: Track, file?: File) => {
     setTracks((prev) => [...prev, newTrack]);
+    saveTrackToDB(newTrack, file).catch((err) =>
+      console.error("Failed to save track to DB:", err)
+    );
     // Optionally switch to the song immediately
     handleTrackSelect(newTrack.id);
   };
@@ -409,6 +451,9 @@ export default function App() {
       handleNextTrack();
     }
     setTracks((prev) => prev.filter((t) => t.id !== trackId));
+    deleteTrackFromDB(trackId).catch((err) =>
+      console.error("Failed to delete track from DB:", err)
+    );
   };
 
   // Lyrics updating helper (for editing or auto-generating timestamps)
@@ -417,13 +462,20 @@ export default function App() {
     plainLyrics: string,
     syncedLyrics?: { time: number; text: string }[]
   ) => {
-    setTracks((prev) =>
-      prev.map((t) =>
+    setTracks((prev) => {
+      const updated = prev.map((t) =>
         t.id === trackId
           ? { ...t, lyrics: plainLyrics, syncedLyrics: syncedLyrics }
           : t
-      )
-    );
+      );
+      const trackToSave = updated.find((t) => t.id === trackId);
+      if (trackToSave) {
+        saveTrackToDB(trackToSave).catch((err) =>
+          console.error("Failed to save updated lyrics to DB:", err)
+        );
+      }
+      return updated;
+    });
   };
 
   // Manual EQ adjustments
@@ -547,12 +599,12 @@ export default function App() {
               onClick={() => setLayoutMode("mobile")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
                 layoutMode === "mobile"
-                  ? "bg-brand text-white shadow-lg shadow-brand/20 font-semibold"
+                  ? "bg-brand text-white shadow-lg shadow-brand/25 font-semibold"
                   : "text-slate-400 hover:text-white"
               }`}
             >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Mobile shell</span>
+              <span>Xiaomi Tablet</span>
             </button>
             <button
               id="layout-btn-dashboard"
@@ -576,352 +628,357 @@ export default function App() {
           /* ========================================================= */
           /* 📱 PREMIUM PORTRAIT ANDROID SIMULATOR                      */
           /* ========================================================= */
-          <div className="relative w-full max-w-[390px] h-[780px] rounded-[48px] border-8 border-slate-800 bg-slate-950 shadow-2xl flex flex-col overflow-hidden ring-4 ring-slate-900 ring-offset-4 ring-offset-slate-950">
-            {/* Front physical camera notch & ears */}
-            <div className="absolute top-0 inset-x-0 h-7 flex items-center justify-between px-8 text-[11px] font-sans font-semibold text-slate-350 z-50 pointer-events-none select-none bg-slate-950/60 backdrop-blur-md">
-              <span>{sysTime}</span>
-              {/* Selfie Camera punch hole */}
-              <div className="w-14 h-4 rounded-full bg-slate-950 border border-slate-800 flex items-center justify-end pr-2 shrink-0">
-                <div className="w-2 h-2 rounded-full bg-slate-900 border border-indigo-950" />
+          <div className="relative w-full max-w-[1024px] h-[660px] rounded-[36px] border-[14px] border-slate-900 bg-slate-950 shadow-2xl flex flex-col overflow-hidden ring-4 ring-slate-800 ring-offset-4 ring-offset-slate-950 mx-auto">
+            {/* Xiaomi HyperOS / Pad Premium Status Bar */}
+            <div className="absolute top-0 inset-x-0 h-8 flex items-center justify-between px-6 text-[10.5px] font-sans font-medium text-slate-350 z-50 pointer-events-none select-none bg-slate-950/80 backdrop-blur-md border-b border-slate-900/40">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{sysTime}</span>
+                <span className="text-[9px] bg-brand/10 text-brand px-1.5 py-0.2 rounded font-mono border border-brand/20 select-none">HyperOS</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Wifi className="w-3.5 h-3.5" />
-                <Battery className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+              
+              {/* Selfie Camera punch hole in middle of bezel */}
+              <div className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                <div className="w-0.5 h-0.5 rounded-full bg-indigo-950" />
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <span className="text-[9px] text-slate-500 font-mono tracking-wider">SOUND BY HARMAN/KARDON</span>
+                <span className="text-slate-600">|</span>
+                <Wifi className="w-3.5 h-3.5 text-slate-350" />
+                <div className="flex items-center gap-1">
+                  <span className="font-mono text-[10px]">98%</span>
+                  <Battery className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                </div>
               </div>
             </div>
 
-            {/* Android Device Sub-Screen Content Area */}
-            <div className="flex-1 flex flex-col pt-8 pb-4 relative overflow-hidden bg-slate-950">
-              {/* Dynamic ambient halo circle glow behind album art */}
-              <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-brand/10 blur-[80px] pointer-events-none z-0" />
+            {/* Tablet Sub-Screen Content Area */}
+            <div className="flex-1 flex flex-col pt-8 relative overflow-hidden bg-slate-950">
+              {/* Dynamic ambient halo circle glow behind tablet desktop */}
+              <div className="absolute top-[20%] left-[25%] w-96 h-96 rounded-full bg-brand/10 blur-[100px] pointer-events-none z-0" />
+              <div className="absolute top-[40%] right-[20%] w-80 h-80 rounded-full bg-brand-light/5 blur-[120px] pointer-events-none z-0" />
 
-              {/* Sub-panels (tabbed) inside Mobile Shell */}
-              <div className="flex-1 overflow-y-auto px-5 pt-3 select-none flex flex-col gap-4 relative z-10">
-                {mobileTab === "player" && (
-                  <div className="flex-1 flex flex-col justify-between py-2 gap-4">
-                    
-                    {/* Header track artist info */}
-                    <div className="text-center pt-2">
-                      <span className="text-[10px] uppercase tracking-widest font-mono text-brand font-semibold bg-brand-transparent border border-brand/25 px-2.5 py-0.5 rounded-full select-none">
-                        Now Playing
-                      </span>
-                    </div>
-
-                    {/* Classic rotating active record or cover widget */}
-                    <div className="flex items-center justify-center my-2">
-                      <div className="relative group p-0.5">
-                        {/* Outer rotating color halo */}
-                        <div className={`absolute inset-0 rounded-full bg-gradient-to-tr from-brand-dark via-brand to-brand-light blur transition-all ${
-                          isPlaying ? "animate-[spin_4s_linear_infinite]" : "opacity-30"
-                        }`} />
-                        
-                        {/* High fidelity album disk container */}
-                        <div className={`relative w-56 h-56 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
-                          isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
-                        }`}>
-                          <img
-                            src={currentTrack?.coverUrl || vaanLogo}
-                            alt={currentTrack?.title || "Vaan Music Player"}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover select-none"
-                          />
-                          {/* Inner Vinyl Ring Mask */}
-                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.85)_46%,rgba(0,0,0,0.95)_55%,transparent_56%)] pointer-events-none" />
-                          {/* Center Spindle pinhole notch */}
-                          <div className="absolute inset-0 margin-auto w-12 h-12 bg-slate-950 border-4 border-slate-900 rounded-full flex items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                            <div className="w-3 h-3 bg-brand rounded-full" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Track metadata titles */}
-                    <div className="text-center">
-                      <h2 className="text-lg font-bold tracking-tight text-white select-text font-display">
-                        {currentTrack?.title || "Library is empty"}
-                      </h2>
-                      <p className="text-xs text-brand-light font-medium tracking-wide mt-1 select-text">
-                        {currentTrack ? (
-                          <>
-                            {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
-                          </>
-                        ) : (
-                          "Switch to 'Tracks' below to add songs"
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Integrated Canvas Spectrum Visualizer */}
-                    <div className="w-full mt-1">
-                      <AudioVisualizer
-                        analyser={analyser}
-                        isPlaying={isPlaying}
-                        visualizerTheme={visualizerTheme}
-                        visualizerStyle={visualizerStyle}
-                      />
-                    </div>
-
-                    {/* Compact timeline bar indicators */}
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
-                        <span>{formatTime(currentTime)}</span>
-                        <span>{formatTime(duration)}</span>
-                      </div>
+              {/* Main Split Grid inside Landscape Tablet */}
+              <div className="flex-1 grid grid-cols-12 gap-6 p-6 overflow-hidden relative z-10">
+                
+                {/* LEFT CONSOLE COLUMN: Interactive Music Player & Deck Track info */}
+                <div className="col-span-12 md:col-span-5 flex flex-col justify-between h-full overflow-hidden bg-slate-900/25 border border-slate-800/40 p-4.5 rounded-2xl backdrop-blur-sm">
+                  
+                  {/* High Quality Vinyl Disk rotation widget */}
+                  <div className="flex items-center justify-center my-1.5 shrink-0">
+                    <div className="relative group p-0.5">
+                      {/* Outer rotating color halo */}
+                      <div className={`absolute inset-0 rounded-full bg-gradient-to-tr from-brand-dark via-brand to-brand-light blur transition-all ${
+                        isPlaying ? "animate-[spin_4s_linear_infinite]" : "opacity-30"
+                      }`} />
                       
-                      <div className="relative group w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center justify-center p-0">
-                        <div
-                          className="absolute left-0 top-0 h-full bg-gradient-to-r from-brand-dark to-brand-light rounded-full pointer-events-none"
-                          style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                      {/* Vinyl body */}
+                      <div className={`relative w-40 h-40 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
+                        isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
+                      }`}>
+                        <img
+                          src={currentTrack?.coverUrl || vaanLogo}
+                          alt={currentTrack?.title || "Vaan Music Player"}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover select-none"
                         />
-                        <input
-                          id="mobile-progress-bar"
-                          type="range"
-                          min="0"
-                          max={duration || 100}
-                          step="0.1"
-                          value={currentTime}
-                          onChange={handleSeek}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer accent-brand"
-                          aria-label="Track progress slider control"
-                        />
-                        {/* Round seek head indicator */}
-                        <div
-                          className="absolute w-3.5 h-3.5 rounded-full bg-white border border-brand shadow pointer-events-none transition-transform"
-                          style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 7px)` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Master Media playback key pad */}
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between px-2">
-                        {/* Shuffle button */}
-                        <button
-                          id="mobile-shuffle-btn"
-                          onClick={() => setIsShuffle(!isShuffle)}
-                          className={`p-2 rounded-xl transition-all ${
-                            isShuffle
-                              ? "bg-brand/15 text-brand-light font-bold border border-brand/20"
-                              : "text-slate-400 hover:text-white"
-                          }`}
-                          title="Shuffle Mode"
-                        >
-                          <Shuffle className="w-4 h-4" />
-                        </button>
-
-                        <div className="flex items-center gap-3">
-                          {/* Fast Rewind */}
-                          <button
-                            id="mobile-rewind-btn"
-                            onClick={handleFastRewind}
-                            className="p-2 rounded-xl bg-slate-900 border border-slate-800/80 hover:bg-slate-800 text-slate-350 transition-all cursor-pointer inline-flex items-center"
-                            title="Rewind 10s"
-                          >
-                            <FastForward className="w-4 h-4 rotate-180" />
-                          </button>
-
-                          {/* Skip Back */}
-                          <button
-                            id="mobile-prev-btn"
-                            onClick={handlePrevTrack}
-                            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white transition-all cursor-pointer"
-                            title="Previous Song"
-                          >
-                            <SkipBack className="w-4 h-4 fill-white" />
-                          </button>
-
-                          {/* Play-Pause Ring */}
-                          <button
-                            id="mobile-play-btn"
-                            onClick={togglePlay}
-                            className="p-5 rounded-full bg-brand hover:bg-brand-light text-white transition-transform duration-300 transform active:scale-95 shadow-lg shadow-brand/25 cursor-pointer flex items-center justify-center outline-none ring-2 ring-white/10"
-                            title="Play/Pause Menu"
-                          >
-                            {isPlaying ? (
-                              <Pause className="w-6 h-6 fill-white" />
-                            ) : (
-                              <Play className="w-6 h-6 fill-white ml-0.5" />
-                            )}
-                          </button>
-
-                          {/* Skip Forward */}
-                          <button
-                            id="mobile-next-btn"
-                            onClick={() => handleNextTrack(true)}
-                            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white transition-all cursor-pointer"
-                            title="Next Song"
-                          >
-                            <SkipForward className="w-4 h-4 fill-white" />
-                          </button>
-
-                          {/* Fast Forward */}
-                          <button
-                            id="mobile-forward-btn"
-                            onClick={handleFastForward}
-                            className="p-2 rounded-xl bg-slate-900 border border-slate-800/80 hover:bg-slate-800 text-slate-350 transition-all cursor-pointer"
-                            title="Forward 10s"
-                          >
-                            <FastForward className="w-4 h-4" />
-                          </button>
+                        {/* Vinyl inner ring texture mask */}
+                        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.85)_46%,rgba(0,0,0,0.95)_55%,transparent_56%)] pointer-events-none" />
+                        {/* Center spindle */}
+                        <div className="absolute inset-0 margin-auto w-10 h-10 bg-slate-950 border-4 border-slate-900 rounded-full flex items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                          <div className="w-2.5 h-2.5 bg-brand rounded-full" />
                         </div>
-                        {/* Repeat button mode selector */}
-                        <button
-                          id="mobile-repeat-btn"
-                          onClick={() => {
-                            if (repeatMode === "off") setRepeatMode("all");
-                            else if (repeatMode === "all") setRepeatMode("one");
-                            else setRepeatMode("off");
-                          }}
-                          className={`p-2 rounded-xl border transition-all flex items-center justify-center relative ${
-                            repeatMode !== "off"
-                              ? "bg-brand/15 text-brand border-brand/20 animate-pulse"
-                              : "text-slate-400 hover:text-white border-transparent"
-                          }`}
-                          title={`Repeat Mode: ${repeatMode}`}
-                        >
-                          <Repeat className="w-4 h-4" />
-                          {repeatMode === "one" && (
-                            <span className="absolute right-0.5 bottom-0.5 text-[8px] font-extrabold bg-brand text-white rounded-full h-3 w-3 flex items-center justify-center ring-1 ring-slate-900 scale-90">
-                              1
-                            </span>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Precise Volume bar */}
-                      <div className="flex items-center gap-2.5 px-3 bg-slate-900/40 py-2 rounded-2xl border border-slate-800/40">
-                        <button
-                          id="mobile-mute-btn"
-                          onClick={() => setIsMuted(!isMuted)}
-                          className="text-brand-light hover:text-white transition-colors"
-                        >
-                          {isMuted ? (
-                            <VolumeX className="w-4 h-4 text-rose-450" />
-                          ) : (
-                            <Volume2 className="w-4 h-4" />
-                          )}
-                        </button>
-                        <input
-                          id="mobile-volume-slider"
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          value={volume}
-                          onChange={(e) => {
-                            setVolume(parseFloat(e.target.value));
-                            if (isMuted) setIsMuted(false);
-                          }}
-                          className="flex-1 h-1 rounded-full cursor-pointer bg-slate-800 accent-brand"
-                          aria-label="Volume slider"
-                        />
-                        <span className="text-[10px] font-mono text-slate-400 w-8 text-right select-none">
-                          {isMuted ? "0" : Math.round(volume * 100)}%
-                        </span>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Sub-panels: Lyrics inside mobile scroll */}
-                {mobileTab === "lyrics" && (
-                  <div className="flex-1 flex flex-col pt-1">
-                    {currentTrack ? (
-                      <SyncedLyrics
-                        track={currentTrack}
-                        currentTime={currentTime}
-                        onLyricsUpdate={handleLyricsUpdate}
+                  {/* Metadata display */}
+                  <div className="text-center shrink-0 mt-2">
+                    <h2 className="text-base font-bold tracking-tight text-white line-clamp-1 font-display">
+                      {currentTrack?.title || "Library is empty"}
+                    </h2>
+                    <p className="text-xs text-brand-light font-medium mt-0.5 truncate">
+                      {currentTrack ? (
+                        <>
+                          {currentTrack.artist} • <span className="text-slate-400">{currentTrack.album}</span>
+                        </>
+                      ) : (
+                        "Upload tracks on the right to start"
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Integrated Canvas Spectrum Visualizer */}
+                  <div className="w-full h-15 mt-3 shrink-0 bg-slate-950/50 border border-slate-800/50 rounded-xl overflow-hidden px-1.5 py-0.5">
+                    <AudioVisualizer
+                      analyser={analyser}
+                      isPlaying={isPlaying}
+                      visualizerTheme={visualizerTheme}
+                      visualizerStyle={visualizerStyle}
+                    />
+                  </div>
+
+                  {/* Timeline Scrubbing Bar */}
+                  <div className="flex flex-col gap-1 mt-3 shrink-0">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
+                    </div>
+                    
+                    <div className="relative group w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center justify-center p-0">
+                      <div
+                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-brand-dark to-brand-light rounded-full pointer-events-none"
+                        style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                       />
-                    ) : (
-                      <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 h-[280px]">
-                        <Music className="w-8 h-8 text-slate-500 animate-pulse" />
-                        <span className="text-sm font-semibold">No track selected</span>
-                        <span className="text-xs text-slate-500">Add some tracks to view synced or custom lyrics</span>
+                      <input
+                        id="tablet-progress-bar"
+                        type="range"
+                        min="0"
+                        max={duration || 100}
+                        step="0.1"
+                        value={currentTime}
+                        onChange={handleSeek}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer accent-brand"
+                        aria-label="Track progress slider control"
+                      />
+                      <div
+                        className="absolute w-3 h-3 rounded-full bg-white border border-brand shadow pointer-events-none transition-transform"
+                        style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 6px)` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Media playback primary controllers */}
+                  <div className="flex flex-col gap-2.5 mt-3 shrink-0">
+                    <div className="flex items-center justify-between px-1">
+                      {/* Shuffle Button */}
+                      <button
+                        id="tablet-shuffle-btn"
+                        onClick={() => setIsShuffle(!isShuffle)}
+                        className={`p-2 rounded-xl transition-all ${
+                          isShuffle
+                            ? "bg-brand/15 text-brand-light font-bold border border-brand/20"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                        title="Shuffle Mode"
+                      >
+                        <Shuffle className="w-4 h-4" />
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        {/* Fast Rewind */}
+                        <button
+                          id="tablet-rewind-btn"
+                          onClick={handleFastRewind}
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800/80 hover:bg-slate-800 text-slate-355 transition-all cursor-pointer inline-flex items-center"
+                          title="Rewind 10s"
+                        >
+                          <FastForward className="w-3.5 h-3.5 rotate-180" />
+                        </button>
+
+                        {/* Skip Back */}
+                        <button
+                          id="tablet-prev-btn"
+                          onClick={handlePrevTrack}
+                          className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white transition-all cursor-pointer"
+                          title="Previous Song"
+                        >
+                          <SkipBack className="w-3.5 h-3.5 fill-white" />
+                        </button>
+
+                        {/* Primary Play-Pause Ring */}
+                        <button
+                          id="tablet-play-btn"
+                          onClick={togglePlay}
+                          className="p-4 rounded-full bg-brand hover:bg-brand-light text-white transition-transform duration-200 transform active:scale-95 shadow-lg shadow-brand/25 cursor-pointer flex items-center justify-center outline-none ring-2 ring-white/10"
+                          title="Play/Pause"
+                        >
+                          {isPlaying ? (
+                            <Pause className="w-5 h-5 fill-white" />
+                          ) : (
+                            <Play className="w-5 h-5 fill-white ml-0.5" />
+                          )}
+                        </button>
+
+                        {/* Skip Forward */}
+                        <button
+                          id="tablet-next-btn"
+                          onClick={() => handleNextTrack(true)}
+                          className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white transition-all cursor-pointer"
+                          title="Next Song"
+                        >
+                          <SkipForward className="w-3.5 h-3.5 fill-white" />
+                        </button>
+
+                        {/* Fast Forward */}
+                        <button
+                          id="tablet-forward-btn"
+                          onClick={handleFastForward}
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800/80 hover:bg-slate-800 text-slate-355 transition-all cursor-pointer"
+                          title="Forward 10s"
+                        >
+                          <FastForward className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Repeat mode selector */}
+                      <button
+                        id="tablet-repeat-btn"
+                        onClick={() => {
+                          if (repeatMode === "off") setRepeatMode("all");
+                          else if (repeatMode === "all") setRepeatMode("one");
+                          else setRepeatMode("off");
+                        }}
+                        className={`p-2 rounded-xl border transition-all flex items-center justify-center relative ${
+                          repeatMode !== "off"
+                            ? "bg-brand/15 text-brand border-brand/20"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                        title={`Repeat Mode: ${repeatMode}`}
+                      >
+                        <Repeat className="w-4 h-4" />
+                        {repeatMode === "one" && (
+                          <span className="absolute right-0.5 bottom-0.5 text-[7px] font-extrabold bg-brand text-white rounded-full h-2.5 w-2.5 flex items-center justify-center ring-1 ring-slate-900 scale-90">
+                            1
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Master Volume Bar */}
+                    <div className="flex items-center gap-2.5 px-3 bg-slate-900/50 py-1.5 rounded-xl border border-slate-800/50">
+                      <button
+                        id="tablet-mute-btn"
+                        onClick={() => setIsMuted(!isMuted)}
+                        className="text-brand hover:text-white transition-colors"
+                      >
+                        {isMuted ? (
+                          <VolumeX className="w-4 h-4 text-rose-450" />
+                        ) : (
+                          <Volume2 className="w-4 h-4" />
+                        )}
+                      </button>
+                      <input
+                        id="tablet-volume-slider"
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={volume}
+                        onChange={(e) => {
+                          setVolume(parseFloat(e.target.value));
+                          if (isMuted) setIsMuted(false);
+                        }}
+                        className="flex-1 h-1 rounded-full cursor-pointer bg-slate-800 accent-brand"
+                        aria-label="Volume slider"
+                      />
+                      <span className="text-[10px] font-mono text-slate-400 w-8 text-right select-none">
+                        {isMuted ? "0" : Math.round(volume * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT INTERACTIVE COLUMN: Synced Lyrics, Equalizer, or Tracks playlist */}
+                <div className="col-span-12 md:col-span-7 flex flex-col h-full overflow-hidden bg-slate-900/15 border border-slate-800/40 p-4 rounded-2xl backdrop-blur-sm">
+                  {/* Tablet Segmented Tab Hub */}
+                  <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/70 text-xs mb-4 shrink-0">
+                    {(["lyrics", "eq", "playlist"] as const).map((tab) => {
+                      const activeTab = mobileTab === "player" ? "lyrics" : mobileTab;
+                      const isCurrent = activeTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          onClick={() => setMobileTab(tab)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg font-medium transition-all cursor-pointer ${
+                            isCurrent
+                              ? "bg-slate-850 text-brand-light font-bold border border-slate-800 shadow-md text-white"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {tab === "lyrics" ? (
+                            <>
+                              <Activity className="w-3.5 h-3.5 text-brand-light" />
+                              <span>Synced Lyrics</span>
+                            </>
+                          ) : tab === "eq" ? (
+                            <>
+                              <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Equalizer DSP</span>
+                            </>
+                          ) : (
+                            <>
+                              <LayoutGrid className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Tracks Library</span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Scrollable container for tabs */}
+                  <div className="flex-1 overflow-y-auto pr-1">
+                    {/* Lyrics tab */}
+                    {(mobileTab === "lyrics" || mobileTab === "player") && (
+                      <div className="h-full flex flex-col">
+                        {currentTrack ? (
+                          <SyncedLyrics
+                            track={currentTrack}
+                            currentTime={currentTime}
+                            onLyricsUpdate={handleLyricsUpdate}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-slate-900/45 border border-slate-800/50 p-6 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 min-h-[300px]">
+                            <Music className="w-8 h-8 text-slate-500 animate-pulse" />
+                            <span className="text-sm font-semibold">No track selected</span>
+                            <span className="text-xs text-slate-500">Upload or import tracks from the Track Library</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Equalizer Tab */}
+                    {mobileTab === "eq" && (
+                      <div className="h-full">
+                        <EqualizerPanel
+                          gains={gains}
+                          onGainChange={handleGainChange}
+                          onPresetSelect={handlePresetSelect}
+                          bassBoost={bassBoost}
+                          onBassBoostChange={setBassBoost}
+                          reverbWet={reverbWet}
+                          onReverbWetChange={setReverbWet}
+                          reverbSize={reverbSize}
+                          onReverbSizeChange={setReverbSize}
+                          pan={pan}
+                          onPanChange={setPan}
+                        />
+                      </div>
+                    )}
+
+                    {/* Playlist Track list Tab */}
+                    {mobileTab === "playlist" && (
+                      <div className="h-full">
+                        <TrackList
+                          tracks={tracks}
+                          currentTrackId={currentTrackId}
+                          isPlaying={isPlaying}
+                          onTrackSelect={handleTrackSelect}
+                          onTrackUpload={handleTrackUpload}
+                          onTrackDelete={handleTrackDelete}
+                        />
                       </div>
                     )}
                   </div>
-                )}
+                </div>
 
-                {/* Sub-panels: Equalizer inside mobile scroll */}
-                {mobileTab === "eq" && (
-                  <div className="flex-1 flex flex-col pt-1">
-                    <EqualizerPanel
-                      gains={gains}
-                      onGainChange={handleGainChange}
-                      onPresetSelect={handlePresetSelect}
-                      bassBoost={bassBoost}
-                      onBassBoostChange={setBassBoost}
-                      reverbWet={reverbWet}
-                      onReverbWetChange={setReverbWet}
-                      reverbSize={reverbSize}
-                      onReverbSizeChange={setReverbSize}
-                      pan={pan}
-                      onPanChange={setPan}
-                    />
-                  </div>
-                )}
-
-                {/* Sub-panels: Track-list playlist manager inside mobile scroll */}
-                {mobileTab === "playlist" && (
-                  <div className="flex-1 flex flex-col pt-1">
-                    <TrackList
-                      tracks={tracks}
-                      currentTrackId={currentTrackId}
-                      isPlaying={isPlaying}
-                      onTrackSelect={handleTrackSelect}
-                      onTrackUpload={handleTrackUpload}
-                      onTrackDelete={handleTrackDelete}
-                    />
-                  </div>
-                )}
               </div>
 
-              {/* Bottom virtual Navigation System Buttons (Android Navigation Hub) */}
-              <nav className="h-[58px] bg-slate-900/90 border-t border-slate-800/80 grid grid-cols-4 items-center px-2 relative z-20 shrink-0">
-                <button
-                  id="tab-btn-player"
-                  onClick={() => setMobileTab("player")}
-                  className={`flex flex-col items-center justify-center gap-1 py-1 transition-all ${
-                    mobileTab === "player" ? "text-brand font-bold" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <Music className="w-4 h-4" />
-                  <span className="text-[10px]">Player</span>
-                </button>
-                <button
-                  id="tab-btn-lyrics"
-                  onClick={() => setMobileTab("lyrics")}
-                  className={`flex flex-col items-center justify-center gap-1 py-1 transition-all ${
-                    mobileTab === "lyrics" ? "text-brand font-bold" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <Activity className="w-4 h-4" />
-                  <span className="text-[10px]">Lyrics</span>
-                </button>
-                <button
-                  id="tab-btn-eq"
-                  onClick={() => setMobileTab("eq")}
-                  className={`flex flex-col items-center justify-center gap-1 py-1 transition-all ${
-                    mobileTab === "eq" ? "text-brand font-bold" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <Sliders className="w-4 h-4" />
-                  <span className="text-[10px]">Equalizer</span>
-                </button>
-                <button
-                  id="tab-btn-playlist"
-                  onClick={() => setMobileTab("playlist")}
-                  className={`flex flex-col items-center justify-center gap-1 py-1 transition-all ${
-                    mobileTab === "playlist" ? "text-brand font-bold" : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                  <span className="text-[10px]">Tracks</span>
-                </button>
-
-                {/* Bottom Gesture pill notch anchor */}
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-28 h-1 bg-slate-750 rounded-full" />
-              </nav>
+              {/* Bottom Android System Gesture Navigation indicator bar */}
+              <div className="h-4 flex items-center justify-center pb-2 relative z-20 shrink-0 bg-slate-950/60 backdrop-blur-md">
+                <div className="w-32 h-1 bg-slate-800 rounded-full" />
+              </div>
             </div>
           </div>
         ) : (
