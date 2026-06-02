@@ -159,7 +159,7 @@ export default function SyncedLyrics({
   };
 
   return (
-    <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col gap-3 text-white h-[280px] relative overflow-hidden">
+    <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-4 rounded-3xl flex flex-col gap-3 text-white h-full min-h-[280px] relative overflow-hidden">
       {/* Upper Navigation Bar */}
       <div className="flex items-center justify-between border-b border-slate-800/50 pb-2 z-10 bg-transparent shrink-0">
         <div className="flex items-center gap-1.5 text-brand">

@@ -536,10 +536,10 @@ export default function App() {
           /* ========================================================= */
           /* 📱 CUSTOM TABLET INTERFACE VIEWPORT                       */
           /* ========================================================= */
-          <div className="relative w-full min-h-[780px] md:h-[820px] rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto">
+          <div className="relative w-full md:h-[640px] rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto">
 
             {/* Tablet Sub-Screen Content Area */}
-            <div className="flex-1 flex flex-col pt-3 relative overflow-hidden bg-slate-950">
+            <div className="flex-1 flex flex-col pt-2 relative overflow-hidden bg-slate-950">
               {/* Dynamic ambient halo circle glow behind tablet desktop */}
               <div className="absolute top-[20%] left-[25%] w-96 h-96 rounded-full bg-brand/10 blur-[100px] pointer-events-none z-0" />
               <div className="absolute top-[40%] right-[20%] w-80 h-80 rounded-full bg-brand-light/5 blur-[120px] pointer-events-none z-0" />
@@ -589,13 +589,13 @@ export default function App() {
               </div>
 
               {/* Main Split Grid inside Landscape Tablet */}
-              <div className="flex-1 grid grid-cols-12 gap-6 p-6 overflow-hidden relative z-10">
+              <div className="flex-1 grid grid-cols-12 gap-5 p-4 pb-5 overflow-hidden relative z-10">
                 
                 {/* LEFT CONSOLE COLUMN: Interactive Music Player & Deck Track info */}
-                <div className="col-span-12 md:col-span-5 flex flex-col justify-between h-full overflow-hidden bg-slate-900/25 border border-slate-800/40 p-4.5 rounded-2xl backdrop-blur-sm">
+                <div className="col-span-12 md:col-span-5 flex flex-col justify-between h-full overflow-hidden bg-slate-900/25 border border-slate-800/40 p-3.5 rounded-2xl backdrop-blur-sm">
                   
                   {/* High Quality Vinyl Disk rotation widget */}
-                  <div className="flex items-center justify-center my-1.5 shrink-0">
+                  <div className="flex items-center justify-center my-1 shrink-0">
                     <div className="relative group p-0.5">
                       {/* Outer rotating color halo */}
                       <div className={`absolute inset-0 rounded-full bg-gradient-to-tr from-brand-dark via-brand to-brand-light blur transition-all ${
@@ -603,7 +603,7 @@ export default function App() {
                       }`} />
                       
                       {/* Vinyl body */}
-                      <div className={`relative w-40 h-40 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
+                      <div className={`relative w-28 h-28 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
                         isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
                       }`}>
                         <img
@@ -615,15 +615,15 @@ export default function App() {
                         {/* Vinyl inner ring texture mask */}
                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.85)_46%,rgba(0,0,0,0.95)_55%,transparent_56%)] pointer-events-none" />
                         {/* Center spindle */}
-                        <div className="absolute inset-0 margin-auto w-10 h-10 bg-slate-950 border-4 border-slate-900 rounded-full flex items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                          <div className="w-2.5 h-2.5 bg-brand rounded-full" />
+                        <div className="absolute inset-0 margin-auto w-8 h-8 bg-slate-950 border-4 border-slate-900 rounded-full flex items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                          <div className="w-2 h-2 bg-brand rounded-full" />
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Metadata display */}
-                  <div className="text-center shrink-0 mt-2">
+                  <div className="text-center shrink-0 mt-1.5">
                     <h2 className="text-base font-bold tracking-tight text-white line-clamp-1 font-display">
                       {currentTrack?.title || "Library is empty"}
                     </h2>
@@ -639,7 +639,7 @@ export default function App() {
                   </div>
 
                   {/* Integrated Canvas Spectrum Visualizer */}
-                  <div className="w-full h-15 mt-3 shrink-0 bg-slate-950/50 border border-slate-800/50 rounded-xl overflow-hidden px-1.5 py-0.5">
+                  <div className="w-full h-10 mt-2.5 shrink-0 bg-slate-950/50 border border-slate-800/50 rounded-xl overflow-hidden px-1.5 py-0.5">
                     <AudioVisualizer
                       analyser={analyser}
                       isPlaying={isPlaying}
@@ -649,13 +649,13 @@ export default function App() {
                   </div>
 
                   {/* Timeline Scrubbing Bar */}
-                  <div className="flex flex-col gap-1 mt-3 shrink-0">
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1">
+                  <div className="flex flex-col gap-0.5 mt-2.5 shrink-0">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 px-1 font-semibold leading-none">
                       <span>{formatTime(currentTime)}</span>
                       <span>{formatTime(duration)}</span>
                     </div>
                     
-                    <div className="relative group w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center justify-center p-0">
+                    <div className="relative group w-full h-1 bg-slate-800 rounded-full cursor-pointer flex items-center justify-center p-0">
                       <div
                         className="absolute left-0 top-0 h-full bg-gradient-to-r from-brand-dark to-brand-light rounded-full pointer-events-none"
                         style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
@@ -672,14 +672,14 @@ export default function App() {
                         aria-label="Track progress slider control"
                       />
                       <div
-                        className="absolute w-3 h-3 rounded-full bg-white border border-brand shadow pointer-events-none transition-transform"
-                        style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 6px)` }}
+                        className="absolute w-2.5 h-2.5 rounded-full bg-white border border-brand shadow pointer-events-none transition-transform"
+                        style={{ left: `calc(${(currentTime / (duration || 1)) * 100}% - 5px)` }}
                       />
                     </div>
                   </div>
 
                   {/* Media playback primary controllers */}
-                  <div className="flex flex-col gap-2.5 mt-3 shrink-0">
+                  <div className="flex flex-col gap-2 mt-2.5 shrink-0">
                     <div className="flex items-center justify-between px-1">
                       {/* Shuffle Button */}
                       <button
@@ -810,9 +810,9 @@ export default function App() {
                 </div>
 
                 {/* RIGHT INTERACTIVE COLUMN: Synced Lyrics, Equalizer, or Tracks playlist */}
-                <div className="col-span-12 md:col-span-7 flex flex-col h-full overflow-hidden bg-slate-900/15 border border-slate-800/40 p-4 rounded-2xl backdrop-blur-sm">
+                <div className="col-span-12 md:col-span-7 flex flex-col h-full overflow-hidden bg-slate-900/15 border border-slate-800/40 p-3.5 rounded-2xl backdrop-blur-sm">
                   {/* Tablet Segmented Tab Hub */}
-                  <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/70 text-xs mb-4 shrink-0">
+                  <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/70 text-xs mb-2.5 shrink-0">
                     {(["playlist", "eq", "lyrics", "visuals"] as const).map((tab) => {
                       const activeTab = mobileTab === "player" ? "playlist" : mobileTab;
                       const isCurrent = activeTab === tab;
@@ -853,7 +853,7 @@ export default function App() {
                   </div>
 
                   {/* Scrollable container for tabs */}
-                  <div className="flex-1 overflow-y-auto pr-1">
+                  <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1">
                     {/* Lyrics tab */}
                     {(mobileTab === "lyrics" || mobileTab === "player") && (
                       <div className="h-full flex flex-col">

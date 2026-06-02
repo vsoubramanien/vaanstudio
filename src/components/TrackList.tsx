@@ -104,7 +104,7 @@ export default function TrackList({
   };
 
   return (
-    <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col gap-4 text-white">
+    <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-4 rounded-3xl flex flex-col gap-3 text-white h-full relative">
       {/* Header bar */}
       <div className="flex items-center justify-between border-b border-slate-800/50 pb-2">
         <div className="flex items-center gap-1.5 text-brand">
@@ -116,7 +116,7 @@ export default function TrackList({
         </span>
       </div>
       {/* Playlist Grid Scrolling */}
-      <div className="max-h-[220px] overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">
         {tracks.map((track) => {
           const isActive = track.id === currentTrackId;
           return (
