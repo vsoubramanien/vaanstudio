@@ -24,7 +24,11 @@ android {
     }
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            outputFileName = "vaanplayer.apk"
+            if (variant.buildType.name == "release") {
+                outputFileName = "vaanplayer.apk"
+            } else {
+                outputFileName = "app-debug.apk"
+            }
         }
     }
 }
