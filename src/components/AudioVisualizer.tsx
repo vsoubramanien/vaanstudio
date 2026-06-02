@@ -5,6 +5,7 @@ interface AudioVisualizerProps {
   isPlaying: boolean;
   visualizerTheme: "neon" | "monochrome" | "sunset" | "matrix";
   visualizerStyle: "bars" | "radial" | "grid" | "oscilloscope";
+  heightClass?: string;
 }
 
 export default function AudioVisualizer({
@@ -12,6 +13,7 @@ export default function AudioVisualizer({
   isPlaying,
   visualizerTheme,
   visualizerStyle,
+  heightClass = "h-16",
 }: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -306,7 +308,7 @@ export default function AudioVisualizer({
   }, [analyser, isPlaying, visualizerTheme, visualizerStyle]);
 
   return (
-    <div className="w-full h-16 bg-slate-950/40 backdrop-blur-md rounded-2xl overflow-hidden border border-slate-800/50 p-1 flex items-end relative">
+    <div className={`w-full ${heightClass} bg-slate-950/40 backdrop-blur-md rounded-2xl overflow-hidden border border-slate-800/50 p-1 flex items-end relative`}>
       <canvas
         id="audio-spectrum-canvas"
         ref={canvasRef}

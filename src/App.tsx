@@ -510,7 +510,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans transition-all duration-700 bg-gradient-to-b ${getAmbientBgColor()} p-4 md:p-6 overflow-x-hidden`}>
+    <div className={`h-screen bg-slate-950 text-slate-100 flex flex-col font-sans transition-all duration-700 bg-gradient-to-b ${getAmbientBgColor()} p-3 md:p-4.5 overflow-hidden`}>
       
       {/* Invisible HTML5 Audio back-end engine */}
       <audio
@@ -531,12 +531,12 @@ export default function App() {
       />
 
       {/* Main Framework Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto flex items-stretch justify-center">
+      <main className="flex-1 max-w-7xl w-full mx-auto flex items-stretch justify-center min-h-0 overflow-hidden">
         {layoutMode === "mobile" ? (
           /* ========================================================= */
           /* 📱 CUSTOM TABLET INTERFACE VIEWPORT                       */
           /* ========================================================= */
-          <div className="relative w-full md:h-[640px] rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto">
+          <div className="relative w-full h-full flex-1 min-h-0 rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto animate-fade-in">
 
             {/* Tablet Sub-Screen Content Area */}
             <div className="flex-1 flex flex-col pt-2 relative overflow-hidden bg-slate-950">
@@ -639,12 +639,13 @@ export default function App() {
                   </div>
 
                   {/* Integrated Canvas Spectrum Visualizer */}
-                  <div className="w-full h-10 mt-2.5 shrink-0 bg-slate-950/50 border border-slate-800/50 rounded-xl overflow-hidden px-1.5 py-0.5">
+                  <div className="w-full h-24 mt-2 shrink-0 bg-slate-950/50 border border-slate-800/50 rounded-xl overflow-hidden px-1.5 py-0.5">
                     <AudioVisualizer
                       analyser={analyser}
                       isPlaying={isPlaying}
                       visualizerTheme={visualizerTheme}
                       visualizerStyle={visualizerStyle}
+                      heightClass="h-full"
                     />
                   </div>
 
@@ -1175,6 +1176,7 @@ export default function App() {
                   isPlaying={isPlaying}
                   visualizerTheme={visualizerTheme}
                   visualizerStyle={visualizerStyle}
+                  heightClass="h-28"
                 />
               </div>
 
