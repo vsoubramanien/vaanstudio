@@ -28,6 +28,7 @@ import {
   Activity,
   Sliders,
   Sparkles,
+  Palette,
   Wifi,
   Battery,
   HardDriveUpload,
@@ -72,7 +73,7 @@ export default function App() {
   const [gains, setGains] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [visualizerTheme, setVisualizerTheme] = useState<"neon" | "sunset" | "matrix" | "monochrome">("neon");
   const [visualizerStyle, setVisualizerStyle] = useState<"bars" | "radial" | "grid" | "oscilloscope">("bars");
-  const [mobileTab, setMobileTab] = useState<"player" | "lyrics" | "eq" | "playlist">("player");
+  const [mobileTab, setMobileTab] = useState<"player" | "lyrics" | "eq" | "playlist" | "visuals">("playlist");
 
   // Expanded DSP FX States
   const [bassBoost, setBassBoost] = useState<number>(0); // 0 to 12 dB
@@ -529,134 +530,63 @@ export default function App() {
         onEnded={handleEnded}
       />
 
-      {/* Navigation Top Header Dashboard */}
-      <header className="max-w-7xl w-full mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/40 pb-4 mb-6 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand/35 bg-brand/5 flex items-center justify-center shrink-0">
-            <img
-              src={vaanLogo}
-              alt="Vaan Logo"
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-xl font-bold tracking-tight text-white font-display">
-                VaanMusicPlayer
-              </h1>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Real-time WebAudio Equalization & Sync Lyrics
-            </p>
-          </div>
-        </div>
-
-        {/* Viewport Toggles and Visualizer Themes */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Visualizer Style Picker */}
-          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-mono px-2">STYLE:</span>
-            {(["bars", "radial", "grid", "oscilloscope"] as const).map((st) => (
-              <button
-                key={st}
-                id={`vis-style-${st}`}
-                onClick={() => setVisualizerStyle(st)}
-                className={`px-2 py-1 rounded-lg capitalize transition-all text-[11px] ${
-                  visualizerStyle === st
-                    ? "bg-slate-800 text-brand-light border border-slate-700/60 font-semibold"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {st === "bars" ? "spectrum" : st === "radial" ? "radial" : st === "grid" ? "3D grid" : "oscilloscope"}
-              </button>
-            ))}
-          </div>
-
-          {/* Visualizer theme Picker */}
-          <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
-            <span className="text-[10px] text-slate-500 font-mono px-2">THEME:</span>
-            {(["neon", "sunset", "matrix", "monochrome"] as const).map((th) => (
-              <button
-                key={th}
-                id={`vis-theme-${th}`}
-                onClick={() => setVisualizerTheme(th)}
-                className={`px-2 py-1 rounded-lg capitalize transition-all text-[11px] ${
-                  visualizerTheme === th
-                    ? "bg-slate-800 text-brand-light border border-slate-700/60 font-semibold"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {th}
-              </button>
-            ))}
-          </div>
-
-          {/* Core Layout Trigger */}
-          <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
-            <button
-              id="layout-btn-mobile"
-              onClick={() => setLayoutMode("mobile")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
-                layoutMode === "mobile"
-                  ? "bg-brand text-white shadow-lg shadow-brand/25 font-semibold"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Xiaomi Tablet</span>
-            </button>
-            <button
-              id="layout-btn-dashboard"
-              onClick={() => setLayoutMode("dashboard")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
-                layoutMode === "dashboard"
-                  ? "bg-brand text-white shadow-lg shadow-brand/20 font-semibold"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Studio Grid</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main Framework Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto flex items-center justify-center">
+      <main className="flex-1 max-w-7xl w-full mx-auto flex items-stretch justify-center">
         {layoutMode === "mobile" ? (
           /* ========================================================= */
-          /* 📱 PREMIUM PORTRAIT ANDROID SIMULATOR                      */
+          /* 📱 CUSTOM TABLET INTERFACE VIEWPORT                       */
           /* ========================================================= */
-          <div className="relative w-full max-w-[1024px] h-[660px] rounded-[36px] border-[14px] border-slate-900 bg-slate-950 shadow-2xl flex flex-col overflow-hidden ring-4 ring-slate-800 ring-offset-4 ring-offset-slate-950 mx-auto">
-            {/* Xiaomi HyperOS / Pad Premium Status Bar */}
-            <div className="absolute top-0 inset-x-0 h-8 flex items-center justify-between px-6 text-[10.5px] font-sans font-medium text-slate-350 z-50 pointer-events-none select-none bg-slate-950/80 backdrop-blur-md border-b border-slate-900/40">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{sysTime}</span>
-                <span className="text-[9px] bg-brand/10 text-brand px-1.5 py-0.2 rounded font-mono border border-brand/20 select-none">HyperOS</span>
-              </div>
-              
-              {/* Selfie Camera punch hole in middle of bezel */}
-              <div className="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
-                <div className="w-0.5 h-0.5 rounded-full bg-indigo-950" />
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <span className="text-[9px] text-slate-500 font-mono tracking-wider">SOUND BY HARMAN/KARDON</span>
-                <span className="text-slate-600">|</span>
-                <Wifi className="w-3.5 h-3.5 text-slate-350" />
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-[10px]">98%</span>
-                  <Battery className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                </div>
-              </div>
-            </div>
+          <div className="relative w-full min-h-[780px] md:h-[820px] rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto">
 
             {/* Tablet Sub-Screen Content Area */}
-            <div className="flex-1 flex flex-col pt-8 relative overflow-hidden bg-slate-950">
+            <div className="flex-1 flex flex-col pt-3 relative overflow-hidden bg-slate-950">
               {/* Dynamic ambient halo circle glow behind tablet desktop */}
               <div className="absolute top-[20%] left-[25%] w-96 h-96 rounded-full bg-brand/10 blur-[100px] pointer-events-none z-0" />
               <div className="absolute top-[40%] right-[20%] w-80 h-80 rounded-full bg-brand-light/5 blur-[120px] pointer-events-none z-0" />
+
+              {/* Tablet native internal app header */}
+              <div className="px-6 pt-3 pb-1 flex items-center justify-between shrink-0 relative z-20">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-brand/10 border border-brand/20 px-2 py-0.5 rounded">
+                    <img
+                      src={vaanLogo}
+                      alt="Vaan Logo"
+                      className="w-3.5 h-3.5 object-cover rounded-sm"
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="text-xs font-bold font-display tracking-tight text-white uppercase">Vaan Player</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono tracking-wider select-none">PREMIUM AUDIO DECK</span>
+                </div>
+                
+                {/* Clean App Layout Switcher inside Tablet */}
+                <div className="flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-805 text-[10px]">
+                  <button
+                    id="layout-btn-mobile"
+                    onClick={() => setLayoutMode("mobile")}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-all cursor-pointer font-medium ${
+                      layoutMode === "mobile"
+                        ? "bg-brand text-white shadow-sm font-semibold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Smartphone className="w-3 h-3" />
+                    <span>Tablet</span>
+                  </button>
+                  <button
+                    id="layout-btn-dashboard"
+                    onClick={() => setLayoutMode("dashboard")}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-all cursor-pointer font-medium ${
+                      layoutMode === "dashboard"
+                        ? "bg-brand text-white shadow-sm font-semibold"
+                        : "text-slate-450 hover:text-white"
+                    }`}
+                  >
+                    <LayoutGrid className="w-3 h-3" />
+                    <span>Studio Grid</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Main Split Grid inside Landscape Tablet */}
               <div className="flex-1 grid grid-cols-12 gap-6 p-6 overflow-hidden relative z-10">
@@ -883,8 +813,8 @@ export default function App() {
                 <div className="col-span-12 md:col-span-7 flex flex-col h-full overflow-hidden bg-slate-900/15 border border-slate-800/40 p-4 rounded-2xl backdrop-blur-sm">
                   {/* Tablet Segmented Tab Hub */}
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/70 text-xs mb-4 shrink-0">
-                    {(["lyrics", "eq", "playlist"] as const).map((tab) => {
-                      const activeTab = mobileTab === "player" ? "lyrics" : mobileTab;
+                    {(["playlist", "eq", "lyrics", "visuals"] as const).map((tab) => {
+                      const activeTab = mobileTab === "player" ? "playlist" : mobileTab;
                       const isCurrent = activeTab === tab;
                       return (
                         <button
@@ -906,10 +836,15 @@ export default function App() {
                               <Sliders className="w-3.5 h-3.5 text-indigo-400" />
                               <span>Equalizer DSP</span>
                             </>
-                          ) : (
+                          ) : tab === "playlist" ? (
                             <>
                               <LayoutGrid className="w-3.5 h-3.5 text-emerald-400" />
                               <span>Tracks Library</span>
+                            </>
+                          ) : (
+                            <>
+                              <Palette className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Visuals</span>
                             </>
                           )}
                         </button>
@@ -970,14 +905,81 @@ export default function App() {
                         />
                       </div>
                     )}
+
+                    {/* Visuals Configuration Theme Tab */}
+                    {mobileTab === "visuals" && (
+                      <div className="h-full flex flex-col gap-5 bg-slate-900/15 p-4 rounded-xl border border-slate-800/30">
+                        <div>
+                          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                            <Sparkles className="w-3.5 h-3.5 text-brand" />
+                            <span>Visualizer Waveform Style</span>
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {[
+                              { id: "bars", name: "Spectrum Bars", desc: "Classic multi-band frequency levels" },
+                              { id: "radial", name: "Radial Ring", desc: "Circular reactive audio pulse circle" },
+                              { id: "grid", name: "3D Grid Landscape", desc: "Retro perspective terrain wireframe" },
+                              { id: "oscilloscope", name: "Oscilloscope", desc: "Analog hardware green wave trace" }
+                            ].map((styleItem) => (
+                              <button
+                                key={styleItem.id}
+                                onClick={() => setVisualizerStyle(styleItem.id as any)}
+                                className={`flex flex-col text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                  visualizerStyle === styleItem.id
+                                    ? "bg-brand/15 border-brand/50 text-white"
+                                    : "bg-slate-950/40 border-slate-800/30 text-slate-400 hover:bg-slate-900/40 hover:text-white"
+                                }`}
+                              >
+                                <span className={`text-[11px] font-bold ${visualizerStyle === styleItem.id ? "text-brand-light" : "text-white"}`}>
+                                  {styleItem.name}
+                                </span>
+                                <span className="text-[9px] text-slate-500 mt-0.5 leading-normal font-sans select-none">
+                                  {styleItem.desc}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-widest flex items-center gap-1.5 mb-2.5">
+                            <Palette className="w-3.5 h-3.5 text-cyan-450" />
+                            <span>Glow & Preset Colorway</span>
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {[
+                              { id: "neon", name: "Neon Cyber", desc: "Futuristic digital cyan & hot purple", color: "from-cyan-400 via-brand to-indigo-650" },
+                              { id: "sunset", name: "Solar Flare", desc: "Warm ambient orange reddish neon", color: "from-amber-400 via-rose-500 to-indigo-700" },
+                              { id: "matrix", name: "phospher Green", desc: "Classic matrix green hacker text", color: "from-emerald-500 via-green-600 to-emerald-950" },
+                              { id: "monochrome", name: "Pure Chrome", desc: "Silver grayscale aesthetic metallic", color: "from-slate-400 via-slate-600 to-slate-800" }
+                            ].map((themeItem) => (
+                              <button
+                                key={themeItem.id}
+                                onClick={() => setVisualizerTheme(themeItem.id as any)}
+                                className={`flex items-center gap-2 text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                                  visualizerTheme === themeItem.id
+                                    ? "bg-brand/15 border-brand/50 text-white"
+                                    : "bg-slate-950/40 border-slate-800/30 text-slate-400 hover:bg-slate-900/40 hover:text-white"
+                                }`}
+                              >
+                                <div className={`w-3 h-3 rounded-full bg-gradient-to-tr ${themeItem.color} shrink-0 ring-1 ring-slate-950`} />
+                                <div className="flex flex-col">
+                                  <span className={`text-[11px] font-bold ${visualizerTheme === themeItem.id ? "text-brand-light" : "text-white"}`}>
+                                    {themeItem.name}
+                                  </span>
+                                  <span className="text-[9px] text-slate-500 mt-0.5 leading-normal font-sans select-none">
+                                    {themeItem.desc}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-              </div>
-
-              {/* Bottom Android System Gesture Navigation indicator bar */}
-              <div className="h-4 flex items-center justify-center pb-2 relative z-20 shrink-0 bg-slate-950/60 backdrop-blur-md">
-                <div className="w-32 h-1 bg-slate-800 rounded-full" />
               </div>
             </div>
           </div>
@@ -985,7 +987,61 @@ export default function App() {
           /* ========================================================= */
           /* 🖥️ LANDSCAPE STUDIO MIXER BENTO DASHBOARD                   */
           /* ========================================================= */
-          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-10">
+          <div className="w-full flex flex-col gap-6">
+            {/* Studio Mixer Dashboard App Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/10 border border-slate-800/20 px-6 py-4.5 rounded-3xl backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl overflow-hidden border border-brand/35 bg-brand/5 flex items-center justify-center shrink-0">
+                  <img
+                    src={vaanLogo}
+                    alt="Vaan Logo"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h1 className="text-base font-bold tracking-tight text-white font-display leading-none">
+                      VaanMusicPlayer - Studio Grid
+                    </h1>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-none">
+                    Real-time WebAudio Studio DSP & Waveform Renderers
+                  </p>
+                </div>
+              </div>
+
+              {/* Clean App Layout Switcher inside Studio Grid */}
+              <div className="flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-805 text-[10px]">
+                <button
+                  id="layout-btn-mobile-dash"
+                  onClick={() => setLayoutMode("mobile")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-medium ${
+                    layoutMode === "mobile"
+                      ? "bg-brand text-white shadow-sm font-semibold"
+                      : "text-slate-500 hover:text-white"
+                  }`}
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Tablet</span>
+                </button>
+                <button
+                  id="layout-btn-dashboard-dash"
+                  onClick={() => setLayoutMode("dashboard")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-medium ${
+                    layoutMode === "dashboard"
+                      ? "bg-brand text-white shadow-sm font-semibold"
+                      : "text-slate-500 hover:text-white"
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Studio Grid</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Original 12-column Grid */}
+            <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-10">
             {/* Left Column: Player Vinyl + Visualizer Spectrum (large) */}
             <div className="lg:col-span-4 flex flex-col gap-6">
               <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-6 rounded-3xl flex flex-col justify-between h-[420px] relative overflow-hidden group">
@@ -1069,8 +1125,51 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Connected Visualizer underneath Player Cover */}
-              <div className="w-full">
+              {/* Connected Visualizer underneath Player Cover with embedded settings deck */}
+              <div className="w-full bg-slate-900/40 backdrop-blur-xl border border-slate-800/70 p-4 rounded-3xl flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/50">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <Sparkles className="w-3.5 h-3.5 text-brand" />
+                    <span className="font-semibold uppercase tracking-wider text-[10px] select-none">Visualizer DSP Deck</span>
+                  </div>
+                  {/* STYLE & THEME Selector controls inside Studio Grid Deck */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Visualizer Style */}
+                    <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/60 text-[9.5px]">
+                      {(["bars", "radial", "grid", "oscilloscope"] as const).map((st) => (
+                        <button
+                          key={st}
+                          id={`dash-vis-style-${st}`}
+                          onClick={() => setVisualizerStyle(st)}
+                          className={`px-1.5 py-0.5 rounded transition-all capitalize select-none cursor-pointer font-medium ${
+                            visualizerStyle === st
+                              ? "bg-brand/20 text-brand-light font-semibold shadow-sm"
+                              : "text-slate-500 hover:text-slate-350"
+                          }`}
+                        >
+                          {st === "bars" ? "spectrum" : st === "radial" ? "radial" : st === "grid" ? "3D grid" : "scope"}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Visualizer Theme */}
+                    <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/60 text-[9.5px]">
+                      {(["neon", "sunset", "matrix", "monochrome"] as const).map((th) => (
+                        <button
+                          key={th}
+                          id={`dash-vis-theme-${th}`}
+                          onClick={() => setVisualizerTheme(th)}
+                          className={`px-1.5 py-0.5 rounded transition-all capitalize select-none cursor-pointer font-medium ${
+                            visualizerTheme === th
+                              ? "bg-brand/20 text-brand-light font-semibold shadow-sm"
+                              : "text-slate-500 hover:text-slate-350"
+                          }`}
+                        >
+                          {th}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
                 <AudioVisualizer
                   analyser={analyser}
                   isPlaying={isPlaying}
@@ -1256,6 +1355,7 @@ export default function App() {
                 />
               </div>
             </div>
+          </div>
           </div>
         )}
       </main>
