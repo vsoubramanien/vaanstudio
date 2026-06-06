@@ -81,6 +81,11 @@ export default function App() {
   const [reverbSize, setReverbSize] = useState<number>(2.0); // 0.5 to 4.0 seconds field size
   const [pan, setPan] = useState<number>(0); // -1.0 (L) to 1.0 (R)
 
+  // Cinematic Spatial Audio states
+  const [spatialMode, setSpatialMode] = useState<"stereo" | "dolby" | "dts" | "stadium">("stereo");
+  const [spatialOrbitSpeed, setSpatialOrbitSpeed] = useState<number>(0.6); // 0.1 to 2.0 rads/s
+  const [spatialDepth, setSpatialDepth] = useState<number>(0.75); // 0.1 to 1.0 size / width factor
+
   // System Clock for Android status bar
   const [sysTime, setSysTime] = useState("14:18");
 
@@ -98,6 +103,26 @@ export default function App() {
   const wetGainRef = useRef<GainNode | null>(null);
   const dryGainRef = useRef<GainNode | null>(null);
   const pannerRef = useRef<StereoPannerNode | null>(null);
+
+  // Cinematic Spatial Engine nodes
+  const routeStereoRef = useRef<GainNode | null>(null);
+  const routeDolbyRef = useRef<GainNode | null>(null);
+  const routeDtsRef = useRef<GainNode | null>(null);
+  const routeStadiumRef = useRef<GainNode | null>(null);
+
+  const spatialInputRef = useRef<GainNode | null>(null);
+  const spatialOutRef = useRef<GainNode | null>(null);
+
+  const dolbyPannerRef = useRef<PannerNode | null>(null);
+
+  const dtsDelayLRef = useRef<DelayNode | null>(null);
+  const dtsDelayRRef = useRef<DelayNode | null>(null);
+  const dtsInvertLRef = useRef<GainNode | null>(null);
+  const dtsInvertRRef = useRef<GainNode | null>(null);
+  const dtsDryLRef = useRef<GainNode | null>(null);
+  const dtsDryRRef = useRef<GainNode | null>(null);
+
+  const stadiumWetRef = useRef<GainNode | null>(null);
 
   // Active track helper
   const currentTrack = tracks.find((t) => t.id === currentTrackId) || tracks[0];
@@ -394,20 +419,184 @@ export default function App() {
         eqOutput.connect(convolver);
         convolver.connect(wetGainNode);
 
-        // Setup Panner (StereoPannerNode) conditionally
-        if (ctx.createStereoPanner) {
-          const panner = ctx.createStereoPanner();
-          panner.pan.value = pan;
-          pannerRef.current = panner;
+        // Setup Spatial Engine Node routing
+        const spatialInput = ctx.createGain();
+        spatialInputRef.current = spatialInput;
+        dryGainNode.connect(spatialInput);
+        wetGainNode.connect(spatialInput);
 
-          dryGainNode.connect(panner);
-          wetGainNode.connect(panner);
-          panner.connect(analyserNode);
-        } else {
-          dryGainNode.connect(analyserNode);
-          wetGainNode.connect(analyserNode);
+        // 1. Standard Stereo Path with StereoPannerNode
+        let stereoPanner: StereoPannerNode | null = null;
+        if (ctx.createStereoPanner) {
+          try {
+            stereoPanner = ctx.createStereoPanner();
+            stereoPanner.pan.value = pan;
+            pannerRef.current = stereoPanner;
+          } catch (e) {
+            console.warn("Could not create StereoPannerNode:", e);
+          }
         }
 
+        // 2. Dolby Atmos 3D Panner Node (HRTF model for 3D positional virtualization)
+        let dolbyPanner: PannerNode | null = null;
+        try {
+          dolbyPanner = ctx.createPanner();
+          dolbyPanner.panningModel = "HRTF";
+          dolbyPanner.distanceModel = "inverse";
+          dolbyPanner.refDistance = 1;
+          dolbyPanner.maxDistance = 10000;
+          dolbyPanner.rolloffFactor = 1;
+          dolbyPanner.coneInnerAngle = 360;
+          dolbyPanner.coneOuterAngle = 360;
+          dolbyPanner.positionX.value = 0;
+          dolbyPanner.positionY.value = 0;
+          dolbyPanner.positionZ.value = 1;
+          dolbyPannerRef.current = dolbyPanner;
+        } catch (e) {
+          console.warn("Could not create Dolby PannerNode:", e);
+        }
+
+        // 3. DTS Matrix Surround Expanders (Haas effect delay & phase-inverted crossfeed)
+        let dtsMerger: ChannelMergerNode | null = null;
+        try {
+          const dtsSplitter = ctx.createChannelSplitter(2);
+          dtsMerger = ctx.createChannelMerger(2);
+
+          const dtsDelayL = ctx.createDelay();
+          const dtsDelayR = ctx.createDelay();
+          dtsDelayL.delayTime.value = 0.022; // 22ms Haas delay for Front left
+          dtsDelayR.delayTime.value = 0.028; // 28ms Haas delay for Front right
+          dtsDelayLRef.current = dtsDelayL;
+          dtsDelayRRef.current = dtsDelayR;
+
+          const dtsInvertL = ctx.createGain();
+          const dtsInvertR = ctx.createGain();
+          dtsInvertL.gain.value = -0.45 * spatialDepth;
+          dtsInvertR.gain.value = -0.45 * spatialDepth;
+          dtsInvertLRef.current = dtsInvertL;
+          dtsInvertRRef.current = dtsInvertR;
+
+          const dtsDryL = ctx.createGain();
+          const dtsDryR = ctx.createGain();
+          dtsDryL.gain.value = 1.0;
+          dtsDryR.gain.value = 1.0;
+          dtsDryLRef.current = dtsDryL;
+          dtsDryRRef.current = dtsDryR;
+
+          // Split input signal
+          spatialInput.connect(dtsSplitter);
+
+          // Direct dry L/R mappings
+          dtsSplitter.connect(dtsDryL, 0);
+          dtsDryL.connect(dtsMerger, 0, 0); // L input -> L output
+
+          dtsSplitter.connect(dtsDryR, 1);
+          dtsDryR.connect(dtsMerger, 0, 1); // R input -> R output
+
+          // Inverted delayed L surround crossfeed merged into R output
+          dtsSplitter.connect(dtsDelayL, 0);
+          dtsDelayL.connect(dtsInvertL);
+          dtsInvertL.connect(dtsMerger, 0, 1);
+
+          // Inverted delayed R surround crossfeed merged into L output
+          dtsSplitter.connect(dtsDelayR, 1);
+          dtsDelayR.connect(dtsInvertR);
+          dtsInvertR.connect(dtsMerger, 0, 0);
+        } catch (e) {
+          console.warn("Could not construct DTS Matrix surround layout:", e);
+        }
+
+        // 4. Stadium Arena surround echoes
+        let stadiumWet: GainNode | null = null;
+        try {
+          const stadiumDelay1 = ctx.createDelay();
+          stadiumDelay1.delayTime.value = 0.18; // 180ms delay 
+          const stadiumDelay2 = ctx.createDelay();
+          stadiumDelay2.delayTime.value = 0.32; // 320ms echo
+
+          const stadiumFeedback1 = ctx.createGain();
+          stadiumFeedback1.gain.value = 0.4;
+          const stadiumFeedback2 = ctx.createGain();
+          stadiumFeedback2.gain.value = 0.3;
+
+          stadiumWet = ctx.createGain();
+          stadiumWet.gain.value = 0.45;
+
+          // Hook feedbacks
+          spatialInput.connect(stadiumDelay1);
+          stadiumDelay1.connect(stadiumFeedback1);
+          stadiumFeedback1.connect(stadiumDelay1);
+
+          spatialInput.connect(stadiumDelay2);
+          stadiumDelay2.connect(stadiumFeedback2);
+          stadiumFeedback2.connect(stadiumDelay2);
+
+          const stadiumMerger = ctx.createGain();
+          stadiumDelay1.connect(stadiumMerger);
+          stadiumDelay2.connect(stadiumMerger);
+          stadiumMerger.connect(stadiumWet);
+
+          stadiumWetRef.current = stadiumWet;
+        } catch (e) {
+          console.warn("Could not construct Stadium live echoes chain:", e);
+        }
+
+        // 5. Connect crossover gains
+        const routeStereo = ctx.createGain();
+        const routeDolby = ctx.createGain();
+        const routeDts = ctx.createGain();
+        const routeStadium = ctx.createGain();
+
+        // Initial volumes set immediately depending on default 'spatialMode' (stereo)
+        routeStereo.gain.value = spatialMode === "stereo" ? 1.0 : 0.0;
+        routeDolby.gain.value = spatialMode === "dolby" ? 1.0 : 0.0;
+        routeDts.gain.value = spatialMode === "dts" ? 1.0 : 0.0;
+        routeStadium.gain.value = spatialMode === "stadium" ? 1.0 : 0.0;
+
+        routeStereoRef.current = routeStereo;
+        routeDolbyRef.current = routeDolby;
+        routeDtsRef.current = routeDts;
+        routeStadiumRef.current = routeStadium;
+
+        // Stereo path inputs
+        if (stereoPanner) {
+          spatialInput.connect(stereoPanner);
+          stereoPanner.connect(routeStereo);
+        } else {
+          spatialInput.connect(routeStereo);
+        }
+
+        // Dolby path inputs
+        if (dolbyPanner) {
+          spatialInput.connect(dolbyPanner);
+          dolbyPanner.connect(routeDolby);
+        } else {
+          spatialInput.connect(routeDolby);
+        }
+
+        // DTS path inputs
+        if (dtsMerger) {
+          dtsMerger.connect(routeDts);
+        } else {
+          spatialInput.connect(routeDts);
+        }
+
+        // Stadium path inputs
+        spatialInput.connect(routeStadium); // Direct dry passthrough
+        if (stadiumWet) {
+          stadiumWet.connect(routeStadium); // Add stadium echoes
+        }
+
+        // Output merger node connects straight to visualizers
+        const spatialOut = ctx.createGain();
+        spatialOutRef.current = spatialOut;
+
+        routeStereo.connect(spatialOut);
+        routeDolby.connect(spatialOut);
+        routeDts.connect(spatialOut);
+        routeStadium.connect(spatialOut);
+
+        spatialOut.connect(analyserNode);
         analyserNode.connect(ctx.destination);
       } catch (err) {
         console.error("Failed to construct Web Audio graph: ", err);
@@ -464,6 +653,84 @@ export default function App() {
       }
     }
   }, [reverbSize]);
+
+  // Sync Spatial Mode dynamically with smooth crossover crossfades
+  useEffect(() => {
+    if (!audioCtxRef.current) return;
+
+    const ctx = audioCtxRef.current;
+    const time = ctx.currentTime;
+    const fadeDuration = 0.15; // 150ms smooth crossover
+
+    const routes = {
+      stereo: routeStereoRef.current,
+      dolby: routeDolbyRef.current,
+      dts: routeDtsRef.current,
+      stadium: routeStadiumRef.current,
+    };
+
+    try {
+      Object.entries(routes).forEach(([modeName, gainNode]) => {
+        if (gainNode) {
+          const targetVal = spatialMode === modeName ? 1.0 : 0.0;
+          // Smooth ramp
+          gainNode.gain.setValueAtTime(gainNode.gain.value, time);
+          gainNode.gain.linearRampToValueAtTime(targetVal, time + fadeDuration);
+        }
+      });
+    } catch (e) {
+      console.warn("Failed to crossfade spatial modes:", e);
+    }
+  }, [spatialMode]);
+
+  // Sync DTS depth parameters dynamically with state updates
+  useEffect(() => {
+    if (!audioCtxRef.current) return;
+    const time = audioCtxRef.current.currentTime;
+    if (dtsInvertLRef.current) {
+      dtsInvertLRef.current.gain.setValueAtTime(-0.45 * spatialDepth, time);
+    }
+    if (dtsInvertRRef.current) {
+      dtsInvertRRef.current.gain.setValueAtTime(-0.45 * spatialDepth, time);
+    }
+  }, [spatialDepth]);
+
+  // Rotate Dolby Atmos 3D coordinates over time when playing
+  useEffect(() => {
+    if (spatialMode !== "dolby" || !isPlaying) return;
+
+    let animationFrameId: number;
+    let angle = 0;
+
+    const updateDolbyPosition = () => {
+      if (dolbyPannerRef.current && audioCtxRef.current) {
+        // Increment rotational angle
+        angle += (spatialOrbitSpeed * 0.016); // step based on ~60fps
+        
+        // Circular orbit in front, behind, and elevated above listener (0,0,0)
+        const radius = 3.5;
+        const x = Math.sin(angle) * radius;
+        const y = Math.sin(angle * 0.5) * 1.5; // elevated overhead sweep
+        const z = Math.cos(angle) * radius;
+
+        const time = audioCtxRef.current.currentTime;
+        try {
+          dolbyPannerRef.current.positionX.setValueAtTime(x, time);
+          dolbyPannerRef.current.positionY.setValueAtTime(y, time);
+          dolbyPannerRef.current.positionZ.setValueAtTime(z, time);
+        } catch (e) {
+          // Direct fallback properties if AudioParam values fail
+          try {
+            dolbyPannerRef.current.setPosition(x, y, z);
+          } catch (err) {}
+        }
+      }
+      animationFrameId = requestAnimationFrame(updateDolbyPosition);
+    };
+
+    updateDolbyPosition();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [spatialMode, spatialOrbitSpeed, isPlaying]);
 
   // Adjust audio element properties when state triggers
   useEffect(() => {
@@ -1069,6 +1336,12 @@ export default function App() {
                           onReverbSizeChange={setReverbSize}
                           pan={pan}
                           onPanChange={setPan}
+                          spatialMode={spatialMode}
+                          onSpatialModeChange={setSpatialMode}
+                          spatialOrbitSpeed={spatialOrbitSpeed}
+                          onSpatialOrbitSpeedChange={setSpatialOrbitSpeed}
+                          spatialDepth={spatialDepth}
+                          onSpatialDepthChange={setSpatialDepth}
                         />
                       </div>
                     )}
@@ -1508,6 +1781,12 @@ export default function App() {
                   onReverbSizeChange={setReverbSize}
                   pan={pan}
                   onPanChange={setPan}
+                  spatialMode={spatialMode}
+                  onSpatialModeChange={setSpatialMode}
+                  spatialOrbitSpeed={spatialOrbitSpeed}
+                  onSpatialOrbitSpeedChange={setSpatialOrbitSpeed}
+                  spatialDepth={spatialDepth}
+                  onSpatialDepthChange={setSpatialDepth}
                 />
               </div>
 

@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { EqualizerPreset } from "../types";
-import { Sliders, Activity, Sparkles } from "lucide-react";
+import { Sliders, Activity, Sparkles, Compass, Waves, Headphones, Radio } from "lucide-react";
 
 interface EqualizerPanelProps {
   gains: number[];
@@ -13,6 +14,13 @@ interface EqualizerPanelProps {
   onReverbSizeChange: (value: number) => void;
   pan: number;
   onPanChange: (value: number) => void;
+  // Spatial Audio extensions
+  spatialMode: "stereo" | "dolby" | "dts" | "stadium";
+  onSpatialModeChange: (mode: "stereo" | "dolby" | "dts" | "stadium") => void;
+  spatialOrbitSpeed: number;
+  onSpatialOrbitSpeedChange: (value: number) => void;
+  spatialDepth: number;
+  onSpatialDepthChange: (value: number) => void;
 }
 
 export const PRESETS: EqualizerPreset[] = [
@@ -52,7 +60,27 @@ export default function EqualizerPanel({
   onReverbSizeChange,
   pan,
   onPanChange,
+  spatialMode,
+  onSpatialModeChange,
+  spatialOrbitSpeed,
+  onSpatialOrbitSpeedChange,
+  spatialDepth,
+  onSpatialDepthChange,
 }: EqualizerPanelProps) {
+
+  // Local state for the dynamic radar visual coordinates rotation
+  const [radarAngle, setRadarAngle] = useState(0);
+
+  useEffect(() => {
+    if (spatialMode !== "dolby") return;
+    let animId: number;
+    const tick = () => {
+      setRadarAngle((prev) => (prev + (spatialOrbitSpeed * 0.04)) % (Math.PI * 2));
+      animId = requestAnimationFrame(tick);
+    };
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, [spatialMode, spatialOrbitSpeed]);
   // Try matching current gains to a preset
   const activePreset =
     PRESETS.find((p) => p.gains.every((val, idx) => Math.round(val) === Math.round(gains[idx])))
@@ -390,6 +418,253 @@ export default function EqualizerPanel({
                 Center
               </button>
               <span>R (Right)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CINEMATIC SPATIAL SOUNDSTAGE ENGINE DEVELOPER BLOCK */}
+      <div className="border-t border-slate-800/60 pt-4 mt-2 flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Compass className="w-4 h-4 text-brand-light animate-spin" style={{ animationDuration: '6s' }} />
+          <h4 className="text-xs font-semibold tracking-wide text-slate-200 uppercase">
+            Cinematic Spatial Soundstage Engine
+          </h4>
+          <span className="text-[9px] lowercase bg-amber-500/10 border border-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-mono animate-pulse">
+            pro dsp
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Spatial Mode Selector controls */}
+          <div className="lg:col-span-7 bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-2xl flex flex-col gap-3">
+            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">
+              Surround Soundstage Selector
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                {
+                  id: "stereo",
+                  name: "Standard Stereo",
+                  desc: "Direct L/R crossfade routing",
+                  color: "border-slate-800 hover:border-slate-750",
+                  activeColor: "bg-slate-900 border-slate-700 text-slate-300 shadow-slate-900/40"
+                },
+                {
+                  id: "dolby",
+                  name: "Dolby Atmos 3D",
+                  desc: "360° HRTF Headstage simulation",
+                  color: "border-violet-950/40 hover:border-violet-900/60",
+                  activeColor: "bg-violet-950/50 border-violet-700 text-violet-300 shadow-violet-950/40"
+                },
+                {
+                  id: "dts",
+                  name: "DTS Neural:X",
+                  desc: "Ultra-wide Haas delay matrix",
+                  color: "border-cyan-950/40 hover:border-cyan-900/60",
+                  activeColor: "bg-cyan-950/50 border-cyan-700 text-cyan-300 shadow-cyan-950/40"
+                },
+                {
+                  id: "stadium",
+                  name: "Stadium Surround",
+                  desc: "Spatially widened live acoustics",
+                  color: "border-amber-950/40 hover:border-amber-900/60",
+                  activeColor: "bg-amber-950/50 border-amber-700 text-amber-300 shadow-amber-900/40"
+                }
+              ].map((m) => {
+                const isActive = spatialMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    id={`spatial-mode-btn-${m.id}`}
+                    onClick={() => onSpatialModeChange(m.id as any)}
+                    className={`p-2 rounded-xl border text-left flex flex-col gap-0.5 transition-all outline-none ${
+                      isActive
+                        ? `${m.activeColor} border-opacity-100 shadow-md scale-[1.01]`
+                        : `${m.color} bg-slate-950/30 text-slate-500`
+                    }`}
+                  >
+                    <span className="text-xs font-bold leading-normal">{m.name}</span>
+                    <span className="text-[9px] opacity-75 font-medium leading-tight">{m.desc}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Dynamic Slider Parameters based on Active Mode */}
+            <div className="border-t border-slate-900/60 pt-2 flex flex-col gap-2">
+              {/* ORBIT SPEED (Dolby mode control) */}
+              <div className={`flex flex-col gap-1.5 transition-all ${spatialMode === "dolby" ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-slate-350">Dolby Atmos Dynamic Orbit Speed</span>
+                  <span className="font-mono font-bold text-brand-light">
+                    {spatialOrbitSpeed.toFixed(1)} rad/s
+                  </span>
+                </div>
+                <div className="relative w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center">
+                  <div
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full"
+                    style={{ width: `${((spatialOrbitSpeed - 0.1) / 1.9) * 100}%` }}
+                  />
+                  <input
+                    id="dsp-spatial-orbit"
+                    type="range"
+                    min="0.1"
+                    max="2.0"
+                    step="0.1"
+                    value={spatialOrbitSpeed}
+                    disabled={spatialMode !== "dolby"}
+                    onChange={(e) => onSpatialOrbitSpeedChange(parseFloat(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    aria-label="Dolby spatial orbit speed"
+                  />
+                  <div
+                    className="absolute w-3 h-3 rounded-full bg-white pointer-events-none"
+                    style={{ left: `calc(${((spatialOrbitSpeed - 0.1) / 1.9) * 100}% - 6px)` }}
+                  />
+                </div>
+              </div>
+
+              {/* WIDTH / DEPTH (DTS and Stadium mode control) */}
+              <div className={`flex flex-col gap-1.5 transition-all ${spatialMode === "dts" || spatialMode === "stadium" ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-slate-350">
+                    {spatialMode === "stadium" ? "Stadium Acoustics Reflection Size" : "DTS Soundstage Stereo Field Width"}
+                  </span>
+                  <span className="font-mono font-bold text-brand-light">
+                    {Math.round(spatialDepth * 100)}%
+                  </span>
+                </div>
+                <div className="relative w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center">
+                  <div
+                    className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"
+                    style={{ width: `${spatialDepth * 100}%` }}
+                  />
+                  <input
+                    id="dsp-spatial-depth"
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.05"
+                    value={spatialDepth}
+                    disabled={spatialMode !== "dts" && spatialMode !== "stadium"}
+                    onChange={(e) => onSpatialDepthChange(parseFloat(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    aria-label="Spatial audio depth width"
+                  />
+                  <div
+                    className="absolute w-3 h-3 rounded-full bg-white pointer-events-none"
+                    style={{ left: `calc(${spatialDepth * 100}% - 6px)` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Acoustic Radar Scope */}
+          <div className="lg:col-span-5 bg-slate-950/65 border border-slate-800/85 p-3 rounded-2xl flex flex-col items-center justify-center relative min-h-[170px] overflow-hidden">
+            {/* Visual Radar Grid backdrops */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.06)_0%,transparent_70%)] pointer-events-none" />
+            
+            {/* Compass / Radar Scope Target Frame */}
+            <div className="w-[100px] h-[100px] rounded-full border border-slate-800/80 relative flex items-center justify-center p-1 bg-slate-950/30">
+              <div className="w-[75px] h-[75px] rounded-full border border-slate-800/40 border-dashed absolute" />
+              <div className="w-[45px] h-[45px] rounded-full border border-slate-800/30 absolute" />
+              
+              {/* Radar Sweeper lines */}
+              <div className="absolute top-0 bottom-0 w-[1px] bg-slate-850" />
+              <div className="absolute left-0 right-0 h-[1px] bg-slate-850" />
+
+              {/* Headphone listener center node */}
+              <div className="z-10 bg-slate-900 border border-slate-700/85 rounded-full p-1.5 shadow-md text-brand">
+                <Headphones className="w-4 h-4 text-brand-light animate-pulse" />
+              </div>
+
+              {/* Dynamic Sound node representations based on active mode */}
+              {spatialMode === "stereo" && (
+                <>
+                  {/* Standard Left sound node */}
+                  <div className="absolute left-[12px] top-[26px] flex flex-col items-center gap-0.5 animate-pulse">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                    <span className="text-[7px] font-mono font-bold text-blue-450">L</span>
+                  </div>
+                  {/* Standard Right sound node */}
+                  <div className="absolute right-[12px] top-[26px] flex flex-col items-center gap-0.5 animate-pulse">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                    <span className="text-[7px] font-mono font-bold text-blue-450">R</span>
+                  </div>
+                </>
+              )}
+
+              {spatialMode === "dolby" && (
+                <>
+                  {/* Virtual Dolby Orbit sound field */}
+                  <div 
+                    className="absolute w-[100px] h-[100px] border border-violet-500/20 rounded-full animate-spin pointer-events-none"
+                    style={{ animationDuration: '4s' }}
+                  />
+                  {/* Orbiting Dolby satellite particle node */}
+                  <div 
+                    className="absolute flex flex-col items-center transition-all duration-75 z-20"
+                    style={{
+                      left: `calc(50% + ${Math.sin(radarAngle) * 38}px - 7px)`,
+                      top: `calc(50% - ${Math.cos(radarAngle) * 38}px - 7px)`
+                    }}
+                  >
+                    <div className="w-3.5 h-3.5 rounded-full bg-violet-400 border border-white shadow-[0_0_12px_rgba(167,139,250,0.9)] animate-ping absolute opacity-45 mx-auto" />
+                    <div className="w-3.5 h-3.5 rounded-full bg-violet-400 border border-white shadow-[0_0_10px_rgba(167,139,250,0.9)] flex items-center justify-center">
+                      <span className="text-[7px] font-mono text-slate-950 font-black">3D</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {spatialMode === "dts" && (
+                <>
+                  {/* Widened sound beams representing DTS delay space matrix */}
+                  <div 
+                    className="absolute h-1.5 bg-gradient-to-r from-cyan-600/30 via-transparent to-cyan-600/30 border-y border-cyan-500/35 transition-all duration-200"
+                    style={{ width: `${65 + (spatialDepth * 35)}px` }}
+                  />
+                  <div className="absolute left-[5px] top-[40px] flex flex-col items-center gap-0.5">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[6.5px] font-mono font-bold text-cyan-300">L-Surr</span>
+                  </div>
+                  <div className="absolute right-[5px] top-[40px] flex flex-col items-center gap-0.5">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <span className="text-[6.5px] font-mono font-bold text-cyan-300">R-Surr</span>
+                  </div>
+                </>
+              )}
+
+              {spatialMode === "stadium" && (
+                <>
+                  {/* Concentric ripples radiating from headphone listener */}
+                  <div 
+                    className="absolute rounded-full border border-amber-500/25 animate-ping opacity-60"
+                    style={{ width: `${35 + (spatialDepth * 55)}px`, height: `${35 + (spatialDepth * 55)}px`, animationDuration: '2.5s' }}
+                  />
+                  <div 
+                    className="absolute rounded-full border border-amber-500/15 animate-ping opacity-30"
+                    style={{ width: `${8 + (spatialDepth * 80)}px`, height: `${8 + (spatialDepth * 80)}px`, animationDuration: '4s' }}
+                  />
+                  <div className="absolute left-[26px] top-[14px] w-1.5 h-1.5 rounded-full bg-amber-400 opacity-60" />
+                  <div className="absolute right-[26px] top-[14px] w-1.5 h-1.5 rounded-full bg-amber-400 opacity-60" />
+                  <div className="absolute left-[14px] top-[60px] w-1.5 h-1.5 rounded-full bg-amber-400 opacity-30" />
+                  <div className="absolute right-[14px] top-[60px] w-1.5 h-1.5 rounded-full bg-amber-400 opacity-30" />
+                </>
+              )}
+            </div>
+
+            {/* Stage scope descriptions */}
+            <div className="mt-3 text-center flex flex-col gap-0.5 select-none z-10 bg-slate-950/85 px-3 py-1 rounded-full border border-slate-900 max-w-full">
+              <span className="text-[9.5px] font-mono font-bold uppercase tracking-wider text-slate-300 block truncate">
+                {spatialMode === "stereo" ? "Standard Stereo Mode" : spatialMode === "dolby" ? "Dolby Atmos Space Radar" : spatialMode === "dts" ? "DTS:X Stereo Matrix" : "Concert Arena Echo Core"}
+              </span>
+              <span className="text-[8px] text-slate-500 block truncate">
+                {spatialMode === "stereo" ? "Standard dual channel balanced audio" : spatialMode === "dolby" ? "Sound source orbiting 3D headset coordinates" : spatialMode === "dts" ? "Haas delay expanded left-right surround" : `Stadium reflection distance: ${Math.round(spatialDepth * 35)} meters`}
+              </span>
             </div>
           </div>
         </div>
