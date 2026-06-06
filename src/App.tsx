@@ -531,7 +531,7 @@ export default function App() {
       />
 
       {/* Main Framework Viewport */}
-      <main className="flex-1 max-w-7xl w-full mx-auto flex items-stretch justify-center min-h-0 overflow-hidden">
+      <main className={`flex-1 max-w-7xl w-full mx-auto flex items-stretch justify-center min-h-0 ${layoutMode === "mobile" ? "overflow-hidden" : "overflow-y-auto scrollbar-thin pr-1"}`}>
         {layoutMode === "mobile" ? (
           /* ========================================================= */
           /* 📱 CUSTOM TABLET INTERFACE VIEWPORT                       */
@@ -1330,7 +1330,7 @@ export default function App() {
               </div>
 
               {/* Lyrics Panel + Upload-Playlist Panel bottom Row Side by Side */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full md:h-[450px]">
                 {/* Apple-music-like Synced Lyrics Module */}
                 {currentTrack ? (
                   <SyncedLyrics
