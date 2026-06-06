@@ -149,6 +149,114 @@ export default function App() {
     }
   }, [currentTrackId]);
 
+  // --- NATIVE SYSTEM MEDIA SESSION CONTROLS ---
+  // Connects the web application audio context, metadata, and playlist commands
+  // directly to the operating system's lockscreen, bluetooth devices, and background trays.
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !currentTrack) return;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title || "Unknown Track",
+        artist: currentTrack.artist || "Unknown Artist",
+        album: currentTrack.album || "Vaan Player Library",
+        artwork: [
+          {
+            src: currentTrack.coverUrl || vaanLogo,
+            sizes: "512x512",
+            type: "image/png"
+          }
+        ]
+      });
+    } catch (err) {
+      console.warn("Failed to update system MediaSession details:", err);
+    }
+  }, [currentTrack]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !audioRef.current) return;
+    if ('setPositionState' in navigator.mediaSession) {
+      try {
+        const pos = currentTime || 0;
+        const dur = duration || 0;
+        if (!isNaN(pos) && !isNaN(dur) && dur > 0 && pos >= 0 && pos <= dur) {
+          navigator.mediaSession.setPositionState({
+            duration: dur,
+            playbackRate: audioRef.current.playbackRate || 1.0,
+            position: pos
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to update system playhead position:", err);
+      }
+    }
+  }, [currentTime, duration]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+
+    try {
+      ms.setActionHandler("play", () => {
+        if (!isPlaying) {
+          togglePlay();
+        }
+      });
+      ms.setActionHandler("pause", () => {
+        if (isPlaying) {
+          togglePlay();
+        }
+      });
+      ms.setActionHandler("previoustrack", () => {
+        handlePrevTrack();
+      });
+      ms.setActionHandler("nexttrack", () => {
+        handleNextTrack(true);
+      });
+      ms.setActionHandler("seekbackward", (details) => {
+        const offset = details.seekOffset || 10;
+        if (audioRef.current) {
+          const target = Math.max(0, audioRef.current.currentTime - offset);
+          audioRef.current.currentTime = target;
+          setCurrentTime(target);
+        }
+      });
+      ms.setActionHandler("seekforward", (details) => {
+        const offset = details.seekOffset || 10;
+        if (audioRef.current) {
+          const target = Math.min(duration, audioRef.current.currentTime + offset);
+          audioRef.current.currentTime = target;
+          setCurrentTime(target);
+        }
+      });
+      ms.setActionHandler("seekto", (details) => {
+        if (details.seekTime !== undefined && audioRef.current) {
+          audioRef.current.currentTime = details.seekTime;
+          setCurrentTime(details.seekTime);
+        }
+      });
+    } catch (err) {
+      console.warn("Failed to attach system media session action handlers:", err);
+    }
+
+    return () => {
+      try {
+        ms.setActionHandler("play", null);
+        ms.setActionHandler("pause", null);
+        ms.setActionHandler("previoustrack", null);
+        ms.setActionHandler("nexttrack", null);
+        ms.setActionHandler("seekbackward", null);
+        ms.setActionHandler("seekforward", null);
+        ms.setActionHandler("seekto", null);
+      } catch (e) {}
+    };
+  }, [isPlaying, currentTrack, duration]);
+
   // Web Audio Context initialization (bypassing browser blocks via click)
   const initAudioEngine = () => {
     if (!audioRef.current) return;
