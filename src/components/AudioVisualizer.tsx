@@ -4,7 +4,7 @@ interface AudioVisualizerProps {
   analyser: AnalyserNode | null;
   isPlaying: boolean;
   visualizerTheme: "neon" | "monochrome" | "sunset" | "matrix";
-  visualizerStyle: "bars" | "radial" | "grid" | "oscilloscope";
+  visualizerStyle: "bars" | "radial" | "grid" | "oscilloscope" | "particles" | "plasma";
   heightClass?: string;
 }
 
@@ -17,6 +17,18 @@ export default function AudioVisualizer({
 }: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
+  const particlesRef = useRef<Array<{
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    radius: number;
+    color: string;
+    alpha: number;
+    decay: number;
+    angleOffset: number;
+    orbitSpeed: number;
+  }>>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -264,6 +276,230 @@ export default function AudioVisualizer({
         ctx.stroke();
         ctx.setLineDash([]);
 
+      } else if (visualizerStyle === "particles") {
+        // --- STELLAR PARTICLES GALAXY ---
+        const cx = w / 2;
+        const cy = h / 2;
+
+        // Determine general volume/bass power
+        let bassSum = 0;
+        const bassCount = Math.min(bufferLength, 15);
+        for (let i = 0; i < bassCount; i++) {
+          bassSum += dataArray[i];
+        }
+        const bassAvg = bassSum / (bassCount || 1);
+        const bassNorm = bassAvg / 255; // 0.0 to 1.0
+
+        // Spawn particles based on energy/bass hits
+        const spawnCount = isPlaying ? Math.floor(bassNorm * 5) + (Math.random() < 0.15 ? 1 : 0) : 1;
+        for (let s = 0; s < spawnCount; s++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 0.5 + Math.random() * 2.0 + bassNorm * 3.5;
+          const size = 1 + Math.random() * 2.5 + bassNorm * 4.5;
+          
+          // Color based on theme
+          let pColor = themeColor;
+          if (visualizerTheme === "neon") {
+            const colors = ["#c084fc", "#3b82f6", "#22c55e", "#ec4899", "#06b6d4"];
+            pColor = colors[Math.floor(Math.random() * colors.length)];
+          } else if (visualizerTheme === "sunset") {
+            const colors = ["#ff4e00", "#ffc400", "#9a011d", "#f43f5e", "#e11d48"];
+            pColor = colors[Math.floor(Math.random() * colors.length)];
+          } else if (visualizerTheme === "matrix") {
+            const colors = ["#22c55e", "#15803d", "#4ade80", "#86efac", "#166534"];
+            pColor = colors[Math.floor(Math.random() * colors.length)];
+          } else if (visualizerTheme === "monochrome") {
+            const colors = ["#f3f4f6", "#9ca3af", "#d1d5db", "#4b5563", "#ffffff"];
+            pColor = colors[Math.floor(Math.random() * colors.length)];
+          }
+
+          particlesRef.current.push({
+            x: cx + (Math.random() - 0.5) * 10,
+            y: cy + (Math.random() - 0.5) * 10,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            radius: size,
+            color: pColor,
+            alpha: 1.0,
+            decay: 0.006 + Math.random() * 0.012,
+            angleOffset: Math.random() * Math.PI * 2,
+            orbitSpeed: (Math.random() - 0.5) * 0.02
+          });
+        }
+
+        // Limit the pool of particles to prevent resource exhaustion (max 250)
+        if (particlesRef.current.length > 250) {
+          particlesRef.current.splice(0, particlesRef.current.length - 250);
+        }
+
+        // Update and draw particles
+        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+          const p = particlesRef.current[i];
+          
+          // Apply orbit swirling force
+          if (isPlaying) {
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            // perpendicular vector for swirl
+            const swirlX = -dy / dist;
+            const swirlY = dx / dist;
+            const swirlStrength = (isPlaying ? bassNorm * 0.45 : 0.05) * (150 / (dist + 50));
+            
+            p.vx += swirlX * swirlStrength;
+            p.vy += swirlY * swirlStrength;
+            
+            // drag
+            p.vx *= 0.985;
+            p.vy *= 0.985;
+          }
+
+          p.x += p.vx;
+          p.y += p.vy;
+          p.alpha -= p.decay;
+
+          if (p.alpha <= 0) {
+            particlesRef.current.splice(i, 1);
+            continue;
+          }
+
+          ctx.save();
+          // Draw particle with glow
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.alpha;
+          
+          if (isPlaying && p.radius > 3.0) {
+            ctx.shadowBlur = p.radius * 2;
+            ctx.shadowColor = p.color;
+          }
+          
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Draw centered glowing active orb core
+        const coreRadius = 14 + bassNorm * 16;
+        const radialGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreRadius);
+        radialGrad.addColorStop(0, "#ffffff");
+        radialGrad.addColorStop(0.35, `rgba(${themeRgb}, 0.8)`);
+        radialGrad.addColorStop(1, "rgba(0,0,0,0)");
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+        ctx.fillStyle = radialGrad;
+        ctx.fill();
+
+      } else if (visualizerStyle === "plasma") {
+        // --- ORGANIC FLUID PLASMA CORE ---
+        const cx = w / 2;
+        const cy = h / 2;
+
+        let volSum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          volSum += dataArray[i];
+        }
+        const volAvg = volSum / bufferLength;
+        const amp = volAvg / 255; // 0.0 to 1.0
+
+        const time = Date.now() * 0.002;
+        const baseRadius = Math.min(w, h) * 0.22 + amp * 12;
+
+        // Create fluid gradient background glow
+        const radGrad = ctx.createRadialGradient(cx, cy, baseRadius * 0.4, cx, cy, baseRadius * 1.8);
+        radGrad.addColorStop(0, `rgba(${themeRgb}, 0.22)`);
+        radGrad.addColorStop(0.5, `rgba(${themeRgb}, 0.08)`);
+        radGrad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseRadius * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw multiple smooth overlapping bezier vertices
+        const layers = 2;
+        for (let layer = 0; layer < layers; layer++) {
+          const numVertices = 16;
+          const points: Array<{x: number, y: number}> = [];
+          
+          for (let v = 0; v < numVertices; v++) {
+            const angle = (v / numVertices) * Math.PI * 2;
+            
+            // Look up corresponding frequency data to map onto shape deformity
+            const dataIdx = Math.floor((v / numVertices) * (bufferLength * 0.5));
+            const subVal = dataArray[dataIdx] || 0;
+            const subAmp = subVal / 255;
+
+            // Wobble using a combination of sine frequencies and audio intensity
+            const wobbleMultiplier = layer === 0 ? 1 : -0.8;
+            const waveOffset = Math.sin(angle * 4 + time * (1.5 + layer) + wobbleMultiplier * 2.0) * 12 * (0.3 + subAmp * 1.2);
+            
+            // Final vertex radius
+            const r = baseRadius * (1.0 - layer * 0.2) + waveOffset;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            points.push({ x, y });
+          }
+
+          // Render smooth path
+          ctx.beginPath();
+          ctx.moveTo(points[0].x, points[0].y);
+          
+          for (let i = 0; i < points.length; i++) {
+            const p0 = points[i];
+            const p1 = points[(i + 1) % points.length];
+            const xc = (p0.x + p1.x) / 2;
+            const yc = (p0.y + p1.y) / 2;
+            ctx.quadraticCurveTo(p0.x, p0.y, xc, yc);
+          }
+          
+          ctx.closePath();
+          
+          // Layer coloring: Outer is more translucent, inner is solid outline
+          if (layer === 0) {
+            ctx.strokeStyle = `rgba(${themeRgb}, 0.85)`;
+            ctx.lineWidth = 3.0;
+            ctx.stroke();
+            ctx.fillStyle = `rgba(${themeRgb}, 0.16)`;
+            ctx.fill();
+          } else {
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+            ctx.fillStyle = `rgba(${themeRgb}, 0.28)`;
+            ctx.fill();
+          }
+        }
+
+        // Draw orbiting electron orbital rings reacting to treble waves
+        const ringCount = 2;
+        for (let r = 0; r < ringCount; r++) {
+          const radiusX = baseRadius * (1.4 + r * 0.2);
+          const radiusY = baseRadius * (0.45 - r * 0.1);
+          const rotAngle = time * 0.15 + (r * Math.PI) / 3;
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(rotAngle);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(${themeRgb}, 0.35)`;
+          ctx.lineWidth = 1.0;
+          ctx.stroke();
+
+          // Spark particle rotating on orbital path
+          const dotAngle = time * 1.5 + r * Math.PI;
+          const dotX = Math.cos(dotAngle) * radiusX;
+          const dotY = Math.sin(dotAngle) * radiusY;
+          
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = themeColor;
+          ctx.fill();
+          ctx.restore();
+        }
       } else {
         // --- CLASSIC SYMMETRICAL FREQUENCY BAR BLOCK ---
         const barWidth = (w / (bufferLength * 0.65)) * 1.0;

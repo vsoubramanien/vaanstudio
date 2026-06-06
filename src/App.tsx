@@ -72,7 +72,7 @@ export default function App() {
   // Equalizer gains corresponding to [40, 125, 400, 1000, 2500, 6000, 15000] Hz
   const [gains, setGains] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [visualizerTheme, setVisualizerTheme] = useState<"neon" | "sunset" | "matrix" | "monochrome">("neon");
-  const [visualizerStyle, setVisualizerStyle] = useState<"bars" | "radial" | "grid" | "oscilloscope">("bars");
+  const [visualizerStyle, setVisualizerStyle] = useState<"bars" | "radial" | "grid" | "oscilloscope" | "particles" | "plasma">("bars");
   const [mobileTab, setMobileTab] = useState<"player" | "lyrics" | "eq" | "playlist" | "visuals">("playlist");
 
   // Expanded DSP FX States
@@ -920,7 +920,9 @@ export default function App() {
                               { id: "bars", name: "Spectrum Bars", desc: "Classic multi-band frequency levels" },
                               { id: "radial", name: "Radial Ring", desc: "Circular reactive audio pulse circle" },
                               { id: "grid", name: "3D Grid Landscape", desc: "Retro perspective terrain wireframe" },
-                              { id: "oscilloscope", name: "Oscilloscope", desc: "Analog hardware green wave trace" }
+                              { id: "oscilloscope", name: "Oscilloscope", desc: "Analog hardware green wave trace" },
+                              { id: "particles", name: "Stellar Particles", desc: "Interactive physical starburst galaxy" },
+                              { id: "plasma", name: "Organic Plasma", desc: "Morphing multi-vertex blob core" }
                             ].map((styleItem) => (
                               <button
                                 key={styleItem.id}
@@ -1137,7 +1139,7 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Visualizer Style */}
                     <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/60 text-[9.5px]">
-                      {(["bars", "radial", "grid", "oscilloscope"] as const).map((st) => (
+                      {(["bars", "radial", "grid", "oscilloscope", "particles", "plasma"] as const).map((st) => (
                         <button
                           key={st}
                           id={`dash-vis-style-${st}`}
@@ -1148,7 +1150,7 @@ export default function App() {
                               : "text-slate-500 hover:text-slate-350"
                           }`}
                         >
-                          {st === "bars" ? "spectrum" : st === "radial" ? "radial" : st === "grid" ? "3D grid" : "scope"}
+                          {st === "bars" ? "spectrum" : st === "radial" ? "radial" : st === "grid" ? "3D grid" : st === "oscilloscope" ? "scope" : st === "particles" ? "stars" : "plasma"}
                         </button>
                       ))}
                     </div>
