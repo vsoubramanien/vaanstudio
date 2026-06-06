@@ -156,17 +156,38 @@ export default function App() {
     if (!('mediaSession' in navigator) || !currentTrack) return;
 
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title || "Unknown Track",
-        artist: currentTrack.artist || "Unknown Artist",
-        album: currentTrack.album || "Vaan Player Library",
-        artwork: [
-          {
-            src: currentTrack.coverUrl || vaanLogo,
-            sizes: "512x512",
-            type: "image/png"
+      // Helper to guarantee absolute URLs since Android's system music overlay fetches artwork 
+      // out of the browser's relative thread/sandboxed scope.
+      const getAbsoluteArtwork = (coverPath?: string) => {
+        const fallback = vaanLogo;
+        const targetPath = coverPath || fallback;
+        let resolvedUrl = targetPath;
+
+        if (targetPath && !targetPath.startsWith("http://") && !targetPath.startsWith("https://") && !targetPath.startsWith("data:") && !targetPath.startsWith("blob:")) {
+          try {
+            resolvedUrl = new URL(targetPath, window.location.href).href;
+          } catch (e) {
+            resolvedUrl = window.location.origin + (targetPath.startsWith("/") ? "" : "/") + targetPath;
           }
-        ]
+        }
+
+        // Return a comprehensive list of specific target resolutions recommended for 
+        // high-density Android notification tray widgets, lockscreens, WearOS, and Bluetooth interfaces.
+        return [
+          { src: resolvedUrl, sizes: "96x96", type: "image/png" },
+          { src: resolvedUrl, sizes: "128x128", type: "image/png" },
+          { src: resolvedUrl, sizes: "192x192", type: "image/png" },
+          { src: resolvedUrl, sizes: "256x256", type: "image/png" },
+          { src: resolvedUrl, sizes: "384x384", type: "image/png" },
+          { src: resolvedUrl, sizes: "512x512", type: "image/png" }
+        ];
+      };
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title || "Vaan Audio Track",
+        artist: currentTrack.artist || "Vaan Player",
+        album: currentTrack.album || "Vaan Music Library",
+        artwork: getAbsoluteArtwork(currentTrack.coverUrl)
       });
     } catch (err) {
       console.warn("Failed to update system MediaSession details:", err);
@@ -202,14 +223,29 @@ export default function App() {
     const ms = navigator.mediaSession;
 
     try {
-      ms.setActionHandler("play", () => {
-        if (!isPlaying) {
-          togglePlay();
+      ms.setActionHandler("play", async () => {
+        if (audioRef.current) {
+          initAudioEngine();
+          try {
+            await audioRef.current.play();
+            setIsPlaying(true);
+          } catch (e) {
+            console.warn("MediaSession play action failed:", e);
+          }
         }
       });
       ms.setActionHandler("pause", () => {
-        if (isPlaying) {
-          togglePlay();
+        if (audioRef.current) {
+          audioRef.current.pause();
+          setIsPlaying(false);
+        }
+      });
+      ms.setActionHandler("stop", () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          setIsPlaying(false);
+          setCurrentTime(0);
         }
       });
       ms.setActionHandler("previoustrack", () => {
@@ -224,6 +260,15 @@ export default function App() {
           const target = Math.max(0, audioRef.current.currentTime - offset);
           audioRef.current.currentTime = target;
           setCurrentTime(target);
+          if ('setPositionState' in ms) {
+            try {
+              ms.setPositionState({
+                duration: duration || 0,
+                playbackRate: audioRef.current.playbackRate || 1.0,
+                position: target
+              });
+            } catch (e) {}
+          }
         }
       });
       ms.setActionHandler("seekforward", (details) => {
@@ -232,12 +277,31 @@ export default function App() {
           const target = Math.min(duration, audioRef.current.currentTime + offset);
           audioRef.current.currentTime = target;
           setCurrentTime(target);
+          if ('setPositionState' in ms) {
+            try {
+              ms.setPositionState({
+                duration: duration || 0,
+                playbackRate: audioRef.current.playbackRate || 1.0,
+                position: target
+              });
+            } catch (e) {}
+          }
         }
       });
       ms.setActionHandler("seekto", (details) => {
         if (details.seekTime !== undefined && audioRef.current) {
-          audioRef.current.currentTime = details.seekTime;
-          setCurrentTime(details.seekTime);
+          const seekTime = details.seekTime;
+          audioRef.current.currentTime = seekTime;
+          setCurrentTime(seekTime);
+          if ('setPositionState' in ms) {
+            try {
+              ms.setPositionState({
+                duration: duration || 0,
+                playbackRate: audioRef.current.playbackRate || 1.0,
+                position: seekTime
+              });
+            } catch (e) {}
+          }
         }
       });
     } catch (err) {
@@ -248,6 +312,7 @@ export default function App() {
       try {
         ms.setActionHandler("play", null);
         ms.setActionHandler("pause", null);
+        ms.setActionHandler("stop", null);
         ms.setActionHandler("previoustrack", null);
         ms.setActionHandler("nexttrack", null);
         ms.setActionHandler("seekbackward", null);
@@ -625,6 +690,13 @@ export default function App() {
         ref={audioRef}
         src={currentTrack?.src || undefined}
         crossOrigin="anonymous"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onLoadedMetadata={() => {
+          if (audioRef.current && !isNaN(audioRef.current.duration)) {
+            setDuration(audioRef.current.duration);
+          }
+        }}
         onTimeUpdate={() => {
           if (audioRef.current) {
             setCurrentTime(audioRef.current.currentTime);
