@@ -20,3 +20,10 @@ export interface EqualizerPreset {
   name: string;
   gains: number[]; // Array of 7 gains for frequencies: 40Hz, 125Hz, 400Hz, 1kHz, 2.5kHz, 6kHz, 15kHz
 }
+
+export interface Playlist {
+  id: string;
+  name: string;
+  trackIds: string[];
+}
+

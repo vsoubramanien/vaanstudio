@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { SAMPLE_TRACKS } from "./data/sampleTracks";
-import { Track } from "./types";
+import { Track, Playlist } from "./types";
 import vaanLogo from "./assets/images/vaan_logo_1780250156730.png";
 import AudioVisualizer from "./components/AudioVisualizer";
 import EqualizerPanel from "./components/EqualizerPanel";
@@ -9,7 +9,10 @@ import TrackList from "./components/TrackList";
 import {
   saveTrackToDB,
   deleteTrackFromDB,
-  getAllTracksFromDB
+  getAllTracksFromDB,
+  savePlaylistToDB,
+  deletePlaylistFromDB,
+  getAllPlaylistsFromDB
 } from "./utils/db";
 import {
   runBackgroundScanner,
@@ -99,6 +102,8 @@ function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay:
 export default function App() {
   // State definitions
   const [tracks, setTracks] = useState<Track[]>(SAMPLE_TRACKS);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [currentTrackId, setCurrentTrackId] = useState<string>(SAMPLE_TRACKS[0]?.id || "");
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -113,7 +118,7 @@ export default function App() {
   const [gains, setGains] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [visualizerTheme, setVisualizerTheme] = useState<"neon" | "sunset" | "matrix" | "monochrome">("neon");
   const [visualizerStyle, setVisualizerStyle] = useState<"bars" | "radial" | "grid" | "oscilloscope" | "particles" | "plasma">("bars");
-  const [mobileTab, setMobileTab] = useState<"player" | "lyrics" | "eq" | "playlist" | "visuals">("playlist");
+  const [mobileTab, setMobileTab] = useState<"player" | "eq" | "playlist" | "visuals">("playlist");
 
   // Expanded DSP FX States
   const [bassBoost, setBassBoost] = useState<number>(0); // 0 to 12 dB
@@ -185,6 +190,10 @@ export default function App() {
 
   // Active track helper
   const currentTrack = tracks.find((t) => t.id === currentTrackId) || tracks[0];
+  const activePlaylist = playlists.find((p) => p.id === activePlaylistId);
+  const activeQueue = activePlaylist
+    ? tracks.filter((t) => activePlaylist.trackIds.includes(t.id))
+    : tracks;
 
   // System time updater
   useEffect(() => {
@@ -223,7 +232,16 @@ export default function App() {
         setTracks(SAMPLE_TRACKS);
       }
     };
+    const loadPersistedPlaylists = async () => {
+      try {
+        const persistedPlaylists = await getAllPlaylistsFromDB();
+        setPlaylists(persistedPlaylists);
+      } catch (err) {
+        console.error("Failed to load playlists from DB on startup:", err);
+      }
+    };
     loadPersistedTracks();
+    loadPersistedPlaylists();
   }, []);
 
   // Save currentTrackId to localStorage on change
@@ -893,21 +911,22 @@ export default function App() {
 
   // Track skipping logic (Forward)
   const handleNextTrack = (userTriggered = true) => {
-    const currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
+    if (activeQueue.length === 0) return;
+    const currentIndex = activeQueue.findIndex((t) => t.id === currentTrackId);
     let nextIndex = currentIndex;
 
     if (isShuffle) {
       // Pick a random track index distinct from active (if there are multiple)
-      if (tracks.length > 1) {
+      if (activeQueue.length > 1) {
         let rand;
         do {
-          rand = Math.floor(Math.random() * tracks.length);
+          rand = Math.floor(Math.random() * activeQueue.length);
         } while (rand === currentIndex);
         nextIndex = rand;
       }
     } else {
       nextIndex = currentIndex + 1;
-      if (nextIndex >= tracks.length) {
+      if (nextIndex >= activeQueue.length) {
         // If at the end, behave according to repeat mode
         if (repeatMode === "all") {
           nextIndex = 0;
@@ -926,11 +945,12 @@ export default function App() {
       }
     }
 
-    handleTrackSelect(tracks[nextIndex].id);
+    handleTrackSelect(activeQueue[nextIndex].id);
   };
 
   // Track skipping logic (Backward)
   const handlePrevTrack = () => {
+    if (activeQueue.length === 0) return;
     // Standard player rule: if song has played > 3 seconds, rewinding resets current track instead of skipping!
     if (currentTime > 3) {
       if (audioRef.current) {
@@ -940,13 +960,13 @@ export default function App() {
       return;
     }
 
-    const currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
+    const currentIndex = activeQueue.findIndex((t) => t.id === currentTrackId);
     let nextIndex = currentIndex - 1;
     if (nextIndex < 0) {
-      nextIndex = tracks.length - 1;
+      nextIndex = activeQueue.length - 1;
     }
 
-    handleTrackSelect(tracks[nextIndex].id);
+    handleTrackSelect(activeQueue[nextIndex].id);
   };
 
   // Quick skipped jump
@@ -1179,6 +1199,64 @@ export default function App() {
     deleteTrackFromDB(trackId).catch((err) =>
       console.error("Failed to delete track from DB:", err)
     );
+
+    // Filter out deleted track from all playlists
+    setPlaylists((prevPlaylists) => {
+      return prevPlaylists.map((p) => {
+        if (p.trackIds.includes(trackId)) {
+          const updatedPlaylist = { ...p, trackIds: p.trackIds.filter((id) => id !== trackId) };
+          savePlaylistToDB(updatedPlaylist).catch((err) =>
+            console.error("Failed to save updated playlist after track delete:", err)
+          );
+          return updatedPlaylist;
+        }
+        return p;
+      });
+    });
+  };
+
+  // --- PLAYLIST CORE ACTIONS ---
+  const handlePlaylistCreate = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const newPlaylist: Playlist = {
+      id: `playlist-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: trimmed,
+      trackIds: [],
+    };
+    setPlaylists((prev) => [...prev, newPlaylist]);
+    savePlaylistToDB(newPlaylist).catch((err) =>
+      console.error("Failed to save new playlist to DB:", err)
+    );
+  };
+
+  const handlePlaylistDelete = (id: string) => {
+    setPlaylists((prev) => prev.filter((p) => p.id !== id));
+    deletePlaylistFromDB(id).catch((err) =>
+      console.error("Failed to delete playlist from DB:", err)
+    );
+    if (activePlaylistId === id) {
+      setActivePlaylistId(null);
+    }
+  };
+
+  const handleTrackTogglePlaylist = (trackId: string, playlistId: string) => {
+    setPlaylists((prevPlaylists) => {
+      return prevPlaylists.map((p) => {
+        if (p.id === playlistId) {
+          const isAdded = p.trackIds.includes(trackId);
+          const updatedTrackIds = isAdded
+            ? p.trackIds.filter((id) => id !== trackId)
+            : [...p.trackIds, trackId];
+          const updatedPlaylist = { ...p, trackIds: updatedTrackIds };
+          savePlaylistToDB(updatedPlaylist).catch((err) =>
+            console.error("Failed to update playlist tracks in DB:", err)
+          );
+          return updatedPlaylist;
+        }
+        return p;
+      });
+    });
   };
 
   // Lyrics updating helper (for editing or auto-generating timestamps)
@@ -1541,11 +1619,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* RIGHT INTERACTIVE COLUMN: Synced Lyrics, Equalizer, or Tracks playlist */}
+                {/* RIGHT INTERACTIVE COLUMN: Equalizer, or Tracks playlist */}
                 <div className="col-span-12 md:col-span-7 flex flex-col h-full overflow-hidden bg-slate-900/15 border border-slate-800/40 p-3.5 rounded-2xl backdrop-blur-sm">
                   {/* Tablet Segmented Tab Hub */}
                   <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/70 text-xs mb-2.5 shrink-0">
-                    {(["playlist", "eq", "lyrics", "visuals"] as const).map((tab) => {
+                    {(["playlist", "eq", "visuals"] as const).map((tab) => {
                       const activeTab = mobileTab === "player" ? "playlist" : mobileTab;
                       const isCurrent = activeTab === tab;
                       return (
@@ -1558,12 +1636,7 @@ export default function App() {
                               : "text-slate-400 hover:text-slate-200"
                           }`}
                         >
-                          {tab === "lyrics" ? (
-                            <>
-                              <Activity className="w-3.5 h-3.5 text-brand-light" />
-                              <span>Synced Lyrics</span>
-                            </>
-                          ) : tab === "eq" ? (
+                          {tab === "eq" ? (
                             <>
                               <Sliders className="w-3.5 h-3.5 text-indigo-400" />
                               <span>Equalizer DSP</span>
@@ -1586,24 +1659,6 @@ export default function App() {
 
                   {/* Scrollable container for tabs */}
                   <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1">
-                    {/* Lyrics tab */}
-                    {(mobileTab === "lyrics" || mobileTab === "player") && (
-                      <div className="h-full flex flex-col">
-                        {currentTrack ? (
-                          <SyncedLyrics
-                            track={currentTrack}
-                            currentTime={currentTime}
-                            onLyricsUpdate={handleLyricsUpdate}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-slate-900/45 border border-slate-800/50 p-6 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 min-h-[300px]">
-                            <Music className="w-8 h-8 text-slate-500 animate-pulse" />
-                            <span className="text-sm font-semibold">No track selected</span>
-                            <span className="text-xs text-slate-500">Upload or import tracks from the Track Library</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* Equalizer Tab */}
                     {mobileTab === "eq" && (
@@ -1648,6 +1703,12 @@ export default function App() {
                           onTrackDelete={handleTrackDelete}
                           onScanTrigger={handleStartScanner}
                           scanStatus={scanProgress.status}
+                          playlists={playlists}
+                          onPlaylistCreate={handlePlaylistCreate}
+                          onPlaylistDelete={handlePlaylistDelete}
+                          onTrackTogglePlaylist={handleTrackTogglePlaylist}
+                          activePlaylistId={activePlaylistId}
+                          onActivePlaylistChange={setActivePlaylistId}
                         />
                       </div>
                     )}
@@ -2088,23 +2149,8 @@ export default function App() {
                 />
               </div>
 
-              {/* Lyrics Panel + Upload-Playlist Panel bottom Row Side by Side */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full md:h-[450px]">
-                {/* Apple-music-like Synced Lyrics Module */}
-                {currentTrack ? (
-                  <SyncedLyrics
-                    track={currentTrack}
-                    currentTime={currentTime}
-                    onLyricsUpdate={handleLyricsUpdate}
-                  />
-                ) : (
-                  <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-slate-800/70 p-5 rounded-3xl flex flex-col justify-center items-center text-slate-400 gap-1.5 h-[280px]">
-                    <Music className="w-8 h-8 text-slate-500 animate-pulse" />
-                    <span className="text-sm font-semibold">No track loaded</span>
-                    <span className="text-xs text-slate-500">Drag and drop tracks into the list on the right</span>
-                  </div>
-                )}
-
+              {/* Upload-Playlist Panel bottom Row */}
+              <div className="w-full md:h-[450px]">
                 {/* Audio library uploader module */}
                 <TrackList
                   tracks={tracks}
@@ -2115,6 +2161,12 @@ export default function App() {
                   onTrackDelete={handleTrackDelete}
                   onScanTrigger={handleStartScanner}
                   scanStatus={scanProgress.status}
+                  playlists={playlists}
+                  onPlaylistCreate={handlePlaylistCreate}
+                  onPlaylistDelete={handlePlaylistDelete}
+                  onTrackTogglePlaylist={handleTrackTogglePlaylist}
+                  activePlaylistId={activePlaylistId}
+                  onActivePlaylistChange={setActivePlaylistId}
                 />
               </div>
             </div>

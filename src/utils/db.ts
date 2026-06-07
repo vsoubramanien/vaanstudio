@@ -1,8 +1,8 @@
-import { Track } from "../types";
+import { Track, Playlist } from "../types";
 
 const DB_NAME = "VaanMusicPlayerDB";
 const STORE_NAME = "tracks";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface DBTrackRecord {
   id: string;
@@ -17,14 +17,18 @@ export function openDB(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event: any) => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains("playlists")) {
+        db.createObjectStore("playlists", { keyPath: "id" });
+      }
     };
   });
 }
+
 
 export async function getTrackRecordFromDB(id: string): Promise<DBTrackRecord | undefined> {
   const db = await openDB();
@@ -111,3 +115,41 @@ export async function getAllTracksFromDB(): Promise<Track[]> {
     request.onerror = () => reject(request.error);
   });
 }
+
+export async function savePlaylistToDB(playlist: Playlist): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("playlists", "readwrite");
+    const store = transaction.objectStore("playlists");
+    const request = store.put(playlist);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deletePlaylistFromDB(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("playlists", "readwrite");
+    const store = transaction.objectStore("playlists");
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getAllPlaylistsFromDB(): Promise<Playlist[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    if (!db.objectStoreNames.contains("playlists")) {
+      resolve([]);
+      return;
+    }
+    const transaction = db.transaction("playlists", "readonly");
+    const store = transaction.objectStore("playlists");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
