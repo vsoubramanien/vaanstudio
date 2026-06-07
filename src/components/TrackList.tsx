@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Track } from "../types";
-import { Music, Play, AudioLines, FileDown, Trash2, PlusCircle } from "lucide-react";
+import { Music, Play, AudioLines, FileDown, Trash2, PlusCircle, RefreshCw, FolderOpen } from "lucide-react";
 
 interface TrackListProps {
   tracks: Track[];
@@ -9,6 +9,8 @@ interface TrackListProps {
   onTrackSelect: (trackId: string) => void;
   onTrackUpload: (track: Track, file: File) => void;
   onTrackDelete: (trackId: string) => void;
+  onScanTrigger: () => void;
+  scanStatus: "idle" | "requesting" | "scanning" | "processing" | "saving" | "completed" | "error";
 }
 
 export default function TrackList({
@@ -18,6 +20,8 @@ export default function TrackList({
   onTrackSelect,
   onTrackUpload,
   onTrackDelete,
+  onScanTrigger,
+  scanStatus,
 }: TrackListProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -111,9 +115,33 @@ export default function TrackList({
           <Music className="w-4 h-4" />
           <h3 className="text-xs font-semibold tracking-wider uppercase">Your Playlist</h3>
         </div>
-        <span className="text-[10px] bg-slate-800 border border-slate-700/60 px-2 py-0.5 rounded-full font-mono text-slate-405">
-          {tracks.length} {tracks.length === 1 ? "Track" : "Tracks"}
-        </span>
+        
+        <div className="flex items-center gap-1.5">
+          <button
+            id="btn-scan-trigger-tracklist"
+            onClick={(e) => {
+              e.stopPropagation();
+              onScanTrigger();
+            }}
+            className={`flex items-center gap-1 text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+              scanStatus !== "idle" && scanStatus !== "completed" && scanStatus !== "error"
+                ? "bg-amber-500/10 border-amber-500/40 text-amber-400 animate-pulse"
+                : "bg-indigo-600/10 hover:bg-indigo-600/20 border-indigo-500/30 text-indigo-300"
+            }`}
+            title="Scan local directories or import folders in background"
+          >
+            {scanStatus !== "idle" && scanStatus !== "completed" && scanStatus !== "error" ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <FolderOpen className="w-3 h-3" />
+            )}
+            <span>{scanStatus !== "idle" && scanStatus !== "completed" && scanStatus !== "error" ? "Scanning..." : "Scan"}</span>
+          </button>
+
+          <span className="text-[10px] bg-slate-800 border border-slate-700/60 px-2 py-0.5 rounded-full font-mono text-slate-400">
+            {tracks.length} {tracks.length === 1 ? "Track" : "Tracks"}
+          </span>
+        </div>
       </div>
       {/* Playlist Grid Scrolling */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 scrollbar-thin">

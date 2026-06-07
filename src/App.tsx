@@ -11,6 +11,12 @@ import {
   deleteTrackFromDB,
   getAllTracksFromDB
 } from "./utils/db";
+import {
+  runBackgroundScanner,
+  crawlHTML5DirectoryList,
+  ScanProgress
+} from "./utils/scanner";
+import { Capacitor } from "@capacitor/core";
 
 // Icon imports
 import {
@@ -35,11 +41,18 @@ import {
   FastForward,
   Rewind,
   Flame,
-  Info
+  Info,
+  FolderOpen,
+  HardDrive,
+  X,
+  ChevronUp,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw
 } from "lucide-react";
 
 // Generate a synthetic, exponentially decaying stereo impulse response for the reverb convolver
-function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay: number = 2.0): AudioBuffer {
+function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay: number = 2.0, environment: string = "hall"): AudioBuffer {
   const sampleRate = ctx.sampleRate;
   const length = Math.max(1, Math.round(sampleRate * duration));
   const impulse = ctx.createBuffer(2, length, sampleRate);
@@ -47,9 +60,36 @@ function createReverbImpulseResponse(ctx: AudioContext, duration: number, decay:
   const right = impulse.getChannelData(1);
   for (let i = 0; i < length; i++) {
     const percent = i / length;
-    // Declining random noise with exponential decay
-    const valLeft = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
-    const valRight = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
+    let valLeft = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
+    let valRight = (Math.random() * 2 - 1) * Math.pow(1 - percent, decay);
+
+    if (environment === "rock") {
+      // Rock Club: tight early reflections, shorter decay, some flutter
+      const flutter = Math.sin(percent * Math.PI * 30) * 0.12;
+      valLeft *= (1 + flutter);
+      valRight *= (1 - flutter);
+    } else if (environment === "studio") {
+      // Small Studio: very fast decay, absorbed highs (warm tone)
+      const dampFactor = Math.exp(-percent * 6.0);
+      valLeft *= dampFactor;
+      valRight *= dampFactor;
+    } else if (environment === "cathedral") {
+      // Cathedral: long pre-delay, dense reflections, resonant low end
+      const wave = Math.sin(percent * Math.PI * 6) * 0.25;
+      valLeft = (valLeft + wave) * Math.exp(-percent * 1.2);
+      valRight = (valRight + wave) * Math.exp(-percent * 1.2);
+    } else if (environment === "concert") {
+      // Concert Hall: elegant stereo sprawl, mild pre-delay
+      const preDelay = Math.round(0.04 * sampleRate); // 40ms pre-delay gap
+      if (i < preDelay) {
+        valLeft *= 0.05;
+        valRight *= 0.05;
+      } else {
+        valLeft *= Math.exp(-(i - preDelay) / (length - preDelay) * 1.8);
+        valRight *= Math.exp(-(i - preDelay) / (length - preDelay) * 1.8);
+      }
+    }
+
     left[i] = valLeft;
     right[i] = valRight;
   }
@@ -77,8 +117,11 @@ export default function App() {
 
   // Expanded DSP FX States
   const [bassBoost, setBassBoost] = useState<number>(0); // 0 to 12 dB
+  const [psychoBass, setPsychoBass] = useState<number>(0); // 0 to 10 harmonics mix
+  const [trebleFocus, setTrebleFocus] = useState<boolean>(false); // Treble emphasis toggle
   const [reverbWet, setReverbWet] = useState<number>(0); // 0.0 to 1.0 (wet level)
   const [reverbSize, setReverbSize] = useState<number>(2.0); // 0.5 to 4.0 seconds field size
+  const [reverbEnv, setReverbEnv] = useState<"rock" | "studio" | "cathedral" | "concert" | "hall">("hall"); // room reflection type
   const [pan, setPan] = useState<number>(0); // -1.0 (L) to 1.0 (R)
 
   // Cinematic Spatial Audio states
@@ -88,6 +131,16 @@ export default function App() {
 
   // System Clock for Android status bar
   const [sysTime, setSysTime] = useState("14:18");
+
+  // Background Automatic Storage Scanner states
+  const [scanProgress, setScanProgress] = useState<ScanProgress>({
+    status: "idle",
+    currentFolder: "",
+    filesFoundCount: 0,
+    filesIndexedCount: 0,
+    message: "",
+  });
+  const [showScannerDashboard, setShowScannerDashboard] = useState<boolean>(false);
 
   // Audio References
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -99,6 +152,12 @@ export default function App() {
 
   // Expanded DSP Node References
   const bassBoostRef = useRef<BiquadFilterNode | null>(null);
+  const psychoBassFilterRef = useRef<BiquadFilterNode | null>(null);
+  const psychoBassShaperRef = useRef<WaveShaperNode | null>(null);
+  const psychoBassBandpassRef = useRef<BiquadFilterNode | null>(null);
+  const psychoBassGainRef = useRef<GainNode | null>(null);
+  const trebleFocusFilterRef = useRef<BiquadFilterNode | null>(null);
+
   const convolverRef = useRef<ConvolverNode | null>(null);
   const wetGainRef = useRef<GainNode | null>(null);
   const dryGainRef = useRef<GainNode | null>(null);
@@ -380,10 +439,17 @@ export default function App() {
         });
         filtersRef.current = filters;
 
-        // 3. Create Reverb convolver block: convolverNode, wetGainNode, dryGainNode
+        // 3. Create Treble Focus filter (highshelf peaking filter)
+        const trebleFocusNode = ctx.createBiquadFilter();
+        trebleFocusNode.type = "highshelf";
+        trebleFocusNode.frequency.value = 7500;
+        trebleFocusNode.gain.value = trebleFocus ? 7.5 : 0.0;
+        trebleFocusFilterRef.current = trebleFocusNode;
+
+        // 4. Create Reverb convolver block: convolverNode, wetGainNode, dryGainNode
         const convolver = ctx.createConvolver();
         try {
-          convolver.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0);
+          convolver.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0, reverbEnv);
         } catch (e) {
           console.error("Failed to generate reverb impulse buffer during init:", e);
         }
@@ -404,10 +470,11 @@ export default function App() {
         setAnalyser(analyserNode);
 
         // Connections:
-        // source -> bassBoostNode -> filter[0] -> ... -> filter[4]
+        // source -> bassBoostNode -> trebleFocusNode -> filter[0] -> ... -> filter[6]
         source.connect(bassBoostNode);
+        bassBoostNode.connect(trebleFocusNode);
 
-        let previousNode: AudioNode = bassBoostNode;
+        let previousNode: AudioNode = trebleFocusNode;
         filters.forEach((filter) => {
           previousNode.connect(filter);
           previousNode = filter;
@@ -415,8 +482,51 @@ export default function App() {
 
         // Split standard signal to reverb (convolver -> wetGainNode) and dry path (dryGainNode)
         const eqOutput = previousNode;
-        eqOutput.connect(dryGainNode);
-        eqOutput.connect(convolver);
+
+        // 5. Build Psychoacoustic Sub-Harmonics Parallel Processing Chain
+        const psychoBassFilter = ctx.createBiquadFilter();
+        psychoBassFilter.type = "lowpass";
+        psychoBassFilter.frequency.value = 90; // Isolate sub-bass frequencies
+        psychoBassFilterRef.current = psychoBassFilter;
+
+        const psychoBassShaper = ctx.createWaveShaper();
+        const makeDistortionCurve = (amount: number) => {
+          const k = typeof amount === 'number' ? amount : 50;
+          const n_samples = 44100;
+          const curve = new Float32Array(n_samples);
+          const deg = Math.PI / 180;
+          for (let i = 0 ; i < n_samples; ++i ) {
+            const x = (i * 2) / n_samples - 1;
+            curve[i] = ( 3 + k ) * x * 20 * deg / ( Math.PI + k * Math.abs(x) );
+          }
+          return curve;
+        };
+        psychoBassShaper.curve = makeDistortionCurve(10); // soft clipping for harmonic synthesis
+        psychoBassShaper.oversample = "4x";
+        psychoBassShaperRef.current = psychoBassShaper;
+
+        const psychoBassBandpass = ctx.createBiquadFilter();
+        psychoBassBandpass.type = "bandpass";
+        psychoBassBandpass.frequency.value = 180; // Keep 2nd/3rd harmonics around 180Hz
+        psychoBassBandpass.Q.value = 1.2;
+        psychoBassBandpassRef.current = psychoBassBandpass;
+
+        const psychoBassGain = ctx.createGain();
+        psychoBassGain.gain.value = psychoBass * 0.15;
+        psychoBassGainRef.current = psychoBassGain;
+
+        eqOutput.connect(psychoBassFilter);
+        psychoBassFilter.connect(psychoBassShaper);
+        psychoBassShaper.connect(psychoBassBandpass);
+        psychoBassBandpass.connect(psychoBassGain);
+
+        // Mix clean audio output and psychoacoustic harmonics together before splitting
+        const audioMixNode = ctx.createGain();
+        eqOutput.connect(audioMixNode);
+        psychoBassGain.connect(audioMixNode);
+
+        audioMixNode.connect(dryGainNode);
+        audioMixNode.connect(convolver);
         convolver.connect(wetGainNode);
 
         // Setup Spatial Engine Node routing
@@ -642,17 +752,32 @@ export default function App() {
     }
   }, [reverbWet]);
 
+  // Sync Psychoacoustic Bass dynamically with state updates
+  useEffect(() => {
+    if (psychoBassGainRef.current) {
+      psychoBassGainRef.current.gain.setValueAtTime(psychoBass * 0.15, audioCtxRef.current?.currentTime || 0);
+    }
+  }, [psychoBass]);
+
+  // Sync Treble Focus dynamically with state updates
+  useEffect(() => {
+    if (trebleFocusFilterRef.current) {
+      const targetGain = trebleFocus ? 7.5 : 0.0;
+      trebleFocusFilterRef.current.gain.setValueAtTime(targetGain, audioCtxRef.current?.currentTime || 0);
+    }
+  }, [trebleFocus]);
+
   // Sync Reverb size / decay (impulse buffer regen) dynamically with state updates
   useEffect(() => {
     const ctx = audioCtxRef.current;
     if (ctx && convolverRef.current) {
       try {
-        convolverRef.current.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0);
+        convolverRef.current.buffer = createReverbImpulseResponse(ctx, reverbSize, 2.0, reverbEnv);
       } catch (err) {
         console.warn("Failed to update convolver buffer dynamically:", err);
       }
     }
-  }, [reverbSize]);
+  }, [reverbSize, reverbEnv]);
 
   // Sync Spatial Mode dynamically with smooth crossover crossfades
   useEffect(() => {
@@ -883,6 +1008,165 @@ export default function App() {
     );
     // Optionally switch to the song immediately
     handleTrackSelect(newTrack.id);
+  };
+
+  // Background local music scanner handles
+  const handleStartScanner = async () => {
+    setShowScannerDashboard(true);
+    setScanProgress({
+      status: "requesting",
+      currentFolder: "",
+      filesFoundCount: 0,
+      filesIndexedCount: 0,
+      message: "Requesting filesystem authorization and configuring crawler tasks...",
+    });
+
+    const onProgressChange = (progress: ScanProgress) => {
+      setScanProgress(progress);
+    };
+
+    const onTrackAdded = (newTrack: Track) => {
+      setTracks((prev) => {
+        const alreadyExists = prev.some(
+          (t) => t.title.toLowerCase() === newTrack.title.toLowerCase() && 
+                 t.artist.toLowerCase() === newTrack.artist.toLowerCase()
+        );
+        if (alreadyExists) return prev;
+        return [...prev, newTrack];
+      });
+    };
+
+    const webSimulationFallback = async () => {
+      setScanProgress({
+        status: "scanning",
+        currentFolder: "Atmospheric Cache",
+        filesFoundCount: 0,
+        filesIndexedCount: 0,
+        message: "Web Sandboxed environment. Please choose 'Import local folder' below, or let us populate live ambient streams for quick testing as simulated music crawl...",
+      });
+    };
+
+    runBackgroundScanner(onProgressChange, onTrackAdded, webSimulationFallback);
+  };
+
+  const handleImportWebFolder = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    setShowScannerDashboard(true);
+    setScanProgress({
+      status: "requesting",
+      currentFolder: "Parsing Selected Folder List",
+      filesFoundCount: 0,
+      filesIndexedCount: 0,
+      message: "Parsing local directory structure in background...",
+    });
+
+    const onProgressChange = (progress: ScanProgress) => {
+      setScanProgress(progress);
+    };
+
+    const onTrackAdded = (newTrack: Track) => {
+      setTracks((prev) => {
+        const alreadyExists = prev.some(
+          (t) => t.title.toLowerCase() === newTrack.title.toLowerCase() && 
+                 t.artist.toLowerCase() === newTrack.artist.toLowerCase()
+        );
+        if (alreadyExists) return prev;
+        return [...prev, newTrack];
+      });
+    };
+
+    const filesArray: File[] = Array.from(e.target.files);
+    crawlHTML5DirectoryList(filesArray, onProgressChange, onTrackAdded);
+  };
+
+  const handleSimulateStreams = async () => {
+    setScanProgress({
+      status: "processing",
+      currentFolder: "Atmospheric Web Index",
+      filesFoundCount: 4,
+      filesIndexedCount: 0,
+      message: "Contacting cosmic catalog streams...",
+    });
+    
+    const simulatedTracks = [
+      {
+        title: "Stardust Horizon",
+        artist: "Cosmic Aura",
+        album: "Atmospheric Space Drones",
+        duration: 242,
+        src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        coverUrl: "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=150&q=80",
+      },
+      {
+        title: "Retro Wave Dream",
+        artist: "Neon Synthland",
+        album: "Outrun Classics",
+        duration: 302,
+        src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        coverUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=150&q=80",
+      },
+      {
+        title: "Chill-fi Rainy Afternoon",
+        artist: "Lofi Cafe Collective",
+        album: "Rainy Day Loops",
+        duration: 185,
+        src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+        coverUrl: "https://images.unsplash.com/photo-1515462277126-270d878326e5?w=150&q=80",
+      },
+      {
+        title: "Ocean Whisper",
+        artist: "Nirvana Chillout",
+        album: "Relaxation Waves",
+        duration: 224,
+        src: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3",
+        coverUrl: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=150&q=80",
+      }
+    ];
+
+    let indexed = 0;
+    for (const trackData of simulatedTracks) {
+      setScanProgress({
+        status: "processing",
+        currentFolder: `stream_catalog://${trackData.album}`,
+        filesFoundCount: simulatedTracks.length,
+        filesIndexedCount: indexed,
+        message: `Importing remote loop: ${trackData.title} by ${trackData.artist}...`,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      const blob = new Blob([""], { type: "audio/mpeg" });
+      const scannedTrack: Track = {
+        id: `simulated-scan-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        title: trackData.title,
+        artist: trackData.artist,
+        album: trackData.album,
+        duration: trackData.duration,
+        src: trackData.src,
+        coverUrl: trackData.coverUrl,
+        isUploaded: true,
+      };
+
+      await saveTrackToDB(scannedTrack, blob);
+      setTracks((prev) => {
+        const alreadyExists = prev.some(
+          (t) => t.title.toLowerCase() === scannedTrack.title.toLowerCase() && 
+                 t.artist.toLowerCase() === scannedTrack.artist.toLowerCase()
+        );
+        if (alreadyExists) return prev;
+        return [...prev, scannedTrack];
+      });
+      indexed++;
+    }
+
+    setScanProgress({
+      status: "completed",
+      currentFolder: "",
+      filesFoundCount: simulatedTracks.length,
+      filesIndexedCount: indexed,
+      message: `Successfully crawled and simulated ${indexed} catalog loops!`,
+    });
   };
 
   // Custom tracks deleting handlings
@@ -1342,6 +1626,12 @@ export default function App() {
                           onSpatialOrbitSpeedChange={setSpatialOrbitSpeed}
                           spatialDepth={spatialDepth}
                           onSpatialDepthChange={setSpatialDepth}
+                          psychoBass={psychoBass}
+                          onPsychoBassChange={setPsychoBass}
+                          trebleFocus={trebleFocus}
+                          onTrebleFocusChange={setTrebleFocus}
+                          reverbEnv={reverbEnv}
+                          onReverbEnvChange={setReverbEnv}
                         />
                       </div>
                     )}
@@ -1356,6 +1646,8 @@ export default function App() {
                           onTrackSelect={handleTrackSelect}
                           onTrackUpload={handleTrackUpload}
                           onTrackDelete={handleTrackDelete}
+                          onScanTrigger={handleStartScanner}
+                          scanStatus={scanProgress.status}
                         />
                       </div>
                     )}
@@ -1787,6 +2079,12 @@ export default function App() {
                   onSpatialOrbitSpeedChange={setSpatialOrbitSpeed}
                   spatialDepth={spatialDepth}
                   onSpatialDepthChange={setSpatialDepth}
+                  psychoBass={psychoBass}
+                  onPsychoBassChange={setPsychoBass}
+                  trebleFocus={trebleFocus}
+                  onTrebleFocusChange={setTrebleFocus}
+                  reverbEnv={reverbEnv}
+                  onReverbEnvChange={setReverbEnv}
                 />
               </div>
 
@@ -1815,6 +2113,8 @@ export default function App() {
                   onTrackSelect={handleTrackSelect}
                   onTrackUpload={handleTrackUpload}
                   onTrackDelete={handleTrackDelete}
+                  onScanTrigger={handleStartScanner}
+                  scanStatus={scanProgress.status}
                 />
               </div>
             </div>
@@ -1823,6 +2123,197 @@ export default function App() {
         )}
       </main>
 
+      {/* Hidden HTML5 folder uploader for testing web crawlers */}
+      <input
+        id="web-folder-scanner-input"
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleImportWebFolder}
+        {...({ webkitdirectory: "", directory: "" } as any)}
+      />
+
+      {/* BACKGROUND CRAWLER MINIMIZED FLOATING BADGE */}
+      {scanProgress.status !== "idle" && !showScannerDashboard && (
+        <div
+          id="scanner-minimized-badge"
+          onClick={() => setShowScannerDashboard(true)}
+          className="fixed bottom-6 right-6 z-50 bg-slate-900/90 backdrop-blur-md border border-indigo-500/40 text-indigo-300 px-4 py-3 rounded-2xl flex items-center gap-2.5 shadow-xl shadow-indigo-950/40 cursor-pointer hover:scale-105 transition-all text-xs font-semibold"
+        >
+          <div className="relative flex h-2 w-2 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+          </div>
+          <span>Scanner Background Tasks: {scanProgress.filesIndexedCount} indexed</span>
+          <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />
+        </div>
+      )}
+
+      {/* BACKGROUND CRAWLER TELEMETRY HUD/OVERLAY */}
+      {showScannerDashboard && (
+        <div 
+          id="scanner-hud-overlay"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md overflow-y-auto"
+        >
+          <div className="bg-slate-900/95 border border-slate-800 shadow-2xl p-6 rounded-3xl w-full max-w-lg flex flex-col gap-5 relative overflow-hidden">
+            {/* Ambient Background Glow Effect */}
+            <div className="absolute -top-10 -right-10 w-24 h-24 bg-indigo-600/10 rounded-full blur-2xl pointer-events-none" />
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800/40 pb-3">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">
+                    Storage Indexing Dashboard
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                    System thread status: COLD-START CRUISE
+                  </p>
+                </div>
+              </div>
+              <button
+                id="btn-close-scanner-hud"
+                onClick={() => setShowScannerDashboard(false)}
+                className="p-1 px-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                title="Minimize dashboard to background"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Simulated Live Spinning Physical HDD Platters */}
+            <div className="flex items-center gap-4 bg-slate-950/40 border border-slate-850 p-4 rounded-2xl">
+              <div className="relative w-16 h-16 rounded-full bg-slate-900 border-2 border-slate-800 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-[inset_0_2px_10px_rgba(0,0,0,0.8)]">
+                {/* Physical rotor spinner */}
+                <div 
+                  className={`w-12 h-12 rounded-full border border-slate-700/60 flex items-center justify-center ${
+                    scanProgress.status !== "idle" && scanProgress.status !== "completed" && scanProgress.status !== "error"
+                      ? "animate-spin"
+                      : ""
+                  }`}
+                  style={{ animationDuration: "2s" }}
+                >
+                  <div className="w-1 h-5 rounded-full bg-indigo-400 opacity-80" />
+                </div>
+                <div className="absolute w-3 h-3 bg-slate-950 border border-slate-700 rounded-full flex items-center justify-center">
+                  <div className="w-1 h-1 bg-emerald-400 rounded-full" />
+                </div>
+              </div>
+              
+              <div className="flex-1 flex flex-col gap-1 min-w-0">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                  Crawler Engine Status
+                </span>
+                <span className="text-xs font-mono text-indigo-300 flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    scanProgress.status === "completed"
+                      ? "bg-emerald-400"
+                      : scanProgress.status === "error"
+                      ? "bg-rose-500"
+                      : scanProgress.status === "idle"
+                      ? "bg-slate-600"
+                      : "bg-amber-400 animate-ping"
+                  }`} />
+                  {scanProgress.status.toUpperCase()}
+                </span>
+                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                  {scanProgress.message}
+                </p>
+              </div>
+            </div>
+
+            {/* Folder progress detail */}
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                <span>Indexing Details:</span>
+                <span className="text-slate-500">
+                  {scanProgress.filesIndexedCount} / {scanProgress.filesFoundCount} tracks synced
+                </span>
+              </div>
+              
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-850/40 relative">
+                <div 
+                  className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${
+                      scanProgress.filesFoundCount > 0 
+                        ? (scanProgress.filesIndexedCount / scanProgress.filesFoundCount) * 100 
+                        : scanProgress.status === "completed" 
+                        ? 100 
+                        : 0
+                    }%` 
+                  }}
+                />
+              </div>
+
+              {scanProgress.currentFolder && (
+                <div className="bg-slate-950/30 border border-slate-800 px-3 py-2 rounded-xl text-[10px] font-mono text-slate-400 truncate flex items-center gap-1.5 mt-1">
+                  <span className="text-emerald-400 font-bold">CRAWL:</span>
+                  <span className="truncate">{scanProgress.currentFolder}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Background Performance Guarantee Badge */}
+            <div className="bg-indigo-950/20 border border-slate-800/60 p-3.5 rounded-2xl flex items-start gap-2.5">
+              <div className="p-1 rounded bg-slate-900 border border-slate-800 shrink-0 select-none">
+                🔊
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <span className="text-[10px] font-bold text-slate-300 leading-normal">
+                  Background Parallel Performance Guarantee
+                </span>
+                <p className="text-[9px] text-slate-500 leading-relaxed">
+                  This crawler utilizes throttled asynchronous intervals to distribute storage directory directory lookups over microtasks. Your active sound stream, equalizer gain matrices, and graphics visualizers will run smoothly with ZERO interruption!
+                </p>
+              </div>
+            </div>
+
+            {/* Interactive Triggers section */}
+            <div className="border-t border-slate-800/40 pt-4 flex flex-col gap-2.5">
+              <span className="text-[10px] font-bold font-mono text-slate-400 uppercase tracking-widest">
+                Testing Fallbacks & Import Options
+              </span>
+
+              <div className="grid grid-cols-2 gap-2.5 text-white">
+                {/* HTML5 Folder Import button */}
+                <button
+                  id="btn-import-web-folder"
+                  onClick={() => document.getElementById("web-folder-scanner-input")?.click()}
+                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-slate-950/50 hover:bg-indigo-600/10 border border-slate-800 hover:border-indigo-500/50 text-slate-300 hover:text-white text-center gap-1.5 transition-all text-xs font-semibold select-none cursor-pointer"
+                >
+                  <FolderOpen className="w-5 h-5 text-indigo-400" />
+                  <span>Crawl PC/Mac Folder</span>
+                  <span className="text-[8px] text-slate-500 font-mono font-normal">recursive html5 import</span>
+                </button>
+
+                {/* Populated Atmospheric list button */}
+                <button
+                  id="btn-simulate-streams"
+                  onClick={handleSimulateStreams}
+                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl bg-slate-950/50 hover:bg-emerald-600/10 border border-slate-800 hover:border-emerald-500/50 text-slate-300 hover:text-white text-center gap-1.5 transition-all text-xs font-semibold select-none cursor-pointer"
+                >
+                  <HardDrive className="w-5 h-5 text-emerald-400" />
+                  <span>Crawl Atmospheric Streams</span>
+                  <span className="text-[8px] text-slate-500 font-mono font-normal">simulated indexing catalog</span>
+                </button>
+              </div>
+
+              {Capacitor.isNativePlatform() && (
+                <button
+                  id="btn-retrigger-native-scan"
+                  onClick={handleStartScanner}
+                  className="w-full bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-center text-xs py-2.5 rounded-xl transition-all shadow-md shadow-indigo-600/10 mt-1 cursor-pointer"
+                >
+                  Retrigger Android Full Storage Scan
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

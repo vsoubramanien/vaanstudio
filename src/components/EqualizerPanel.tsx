@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { EqualizerPreset } from "../types";
-import { Sliders, Activity, Sparkles, Compass, Waves, Headphones, Radio } from "lucide-react";
+import { Sliders, Activity, Sparkles, Compass, Waves, Headphones, Radio, Zap, Music } from "lucide-react";
 
 interface EqualizerPanelProps {
   gains: number[];
@@ -21,6 +21,13 @@ interface EqualizerPanelProps {
   onSpatialOrbitSpeedChange: (value: number) => void;
   spatialDepth: number;
   onSpatialDepthChange: (value: number) => void;
+  // Bass Booster & Room-Reverb updates
+  psychoBass: number;
+  onPsychoBassChange: (value: number) => void;
+  trebleFocus: boolean;
+  onTrebleFocusChange: (value: boolean) => void;
+  reverbEnv: "rock" | "studio" | "cathedral" | "concert" | "hall";
+  onReverbEnvChange: (env: "rock" | "studio" | "cathedral" | "concert" | "hall") => void;
 }
 
 export const PRESETS: EqualizerPreset[] = [
@@ -66,6 +73,12 @@ export default function EqualizerPanel({
   onSpatialOrbitSpeedChange,
   spatialDepth,
   onSpatialDepthChange,
+  psychoBass,
+  onPsychoBassChange,
+  trebleFocus,
+  onTrebleFocusChange,
+  reverbEnv,
+  onReverbEnvChange,
 }: EqualizerPanelProps) {
 
   // Local state for the dynamic radar visual coordinates rotation
@@ -250,7 +263,7 @@ export default function EqualizerPanel({
       </div>
 
       {/* Expanded DSP Audio FX Rack */}
-      <div className="border-t border-slate-800/60 pt-4 mt-2 flex flex-col gap-3">
+      <div id="dsp-audio-fx-rack" className="border-t border-slate-800/60 pt-4 mt-2 flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-brand-light animate-pulse" />
           <h4 className="text-xs font-semibold tracking-wide text-slate-200 uppercase">
@@ -259,49 +272,135 @@ export default function EqualizerPanel({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* BASS BOOST CONTROL */}
-          <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-2xl flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-350">Bass Boost</span>
-              <span className="text-[10px] font-mono font-semibold text-brand-light">
-                {bassBoost === 0 ? "OFF" : `+${bassBoost} dB`}
-              </span>
+          
+          {/* BASS ENGINE & TREBLE CLINIC (Expanded with Psychoacoustic dial & toggle) */}
+          <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-2xl flex flex-col gap-3.5">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-medium text-slate-350">Analog Bass Boost</span>
+                <span className="text-[10px] font-mono font-semibold text-brand-light">
+                  {bassBoost === 0 ? "OFF" : `+${bassBoost} dB`}
+                </span>
+              </div>
+              
+              <div className="relative group w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center">
+                <div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full pointer-events-none"
+                  style={{ width: `${(bassBoost / 12) * 100}%` }}
+                />
+                <input
+                  id="dsp-bass-boost"
+                  type="range"
+                  min="0"
+                  max="12"
+                  step="0.5"
+                  value={bassBoost}
+                  onChange={(e) => onBassBoostChange(parseFloat(e.target.value))}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  aria-label="Analog bass boost slider"
+                />
+                <div
+                  className="absolute w-3 h-3 rounded-full bg-white border border-brand pointer-events-none"
+                  style={{ left: `calc(${(bassBoost / 12) * 100}% - 6px)` }}
+                />
+              </div>
             </div>
-            
-            <div className="relative group w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center">
-              <div
-                className="absolute left-0 top-0 h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full pointer-events-none"
-                style={{ width: `${(bassBoost / 12) * 100}%` }}
-              />
-              <input
-                id="dsp-bass-boost"
-                type="range"
-                min="0"
-                max="12"
-                step="0.5"
-                value={bassBoost}
-                onChange={(e) => onBassBoostChange(parseFloat(e.target.value))}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                aria-label="Bass boost slider"
-              />
-              <div
-                className="absolute w-3 h-3 rounded-full bg-white border border-brand pointer-events-none"
-                style={{ left: `calc(${(bassBoost / 12) * 100}% - 6px)` }}
-              />
+
+            {/* Psychoacoustic Sub-Harmonics Potentiometer */}
+            <div className="border-t border-slate-800/40 pt-2 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-300 flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  Sub-Harmonics (Psychoacoustic)
+                </span>
+                <span className="text-[10px] font-mono text-amber-400 font-semibold">
+                  {psychoBass === 0 ? "STBY" : `${Math.round(psychoBass * 10)}%`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Simulated Analogue Pottery Dial */}
+                <div className="relative w-14 h-14 bg-slate-900 rounded-full border border-slate-700/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)] flex items-center justify-center group flex-shrink-0">
+                  {/* Calibrated dial markings notches */}
+                  <div className="absolute -inset-1.5 rounded-full border border-slate-800/40 pointer-events-none border-dashed" />
+                  
+                  {/* Inner Rotatable Knob Face */}
+                  <div 
+                    className="w-10 h-10 rounded-full bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-950 border border-slate-700/60 shadow-md flex items-center justify-center transition-transform duration-75 relative"
+                    style={{ transform: `rotate(${-135 + (psychoBass / 10) * 270}deg)` }}
+                  >
+                    {/* Metal slot marker */}
+                    <div className="absolute top-1 left-[18px] w-1 h-3 rounded-full bg-amber-400 shadow-[0_0_6px_#ffbf00]" />
+                  </div>
+                </div>
+
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <span className="text-[9px] text-slate-500 leading-tight">
+                    Waveshaper synthetically multiplies low-end frequencies for ultra-low bass perception on any hardware speaker.
+                  </span>
+                  
+                  {/* Range slider that drives the dial */}
+                  <div className="relative w-full h-1 bg-slate-800 rounded-full flex items-center">
+                    <div
+                      className="absolute left-0 top-0 h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full pointer-events-none"
+                      style={{ width: `${(psychoBass / 10) * 100}%` }}
+                    />
+                    <input
+                      id="dsp-psycho-bass"
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      value={psychoBass}
+                      onChange={(e) => onPsychoBassChange(parseFloat(e.target.value))}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      aria-label="Psychoacoustic sub harmonics dial control"
+                    />
+                    <div
+                      className="absolute w-2.5 h-2.5 rounded-full bg-white border border-amber-500 pointer-events-none"
+                      style={{ left: `calc(${(psychoBass / 10) * 100}% - 5px)` }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-[9px] text-slate-500">
-              <span>Punchy Lows</span>
+
+            {/* Treble-Focus Switch (Crisp Presence Toggle) */}
+            <div className="border-t border-slate-800/40 pt-2 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-medium text-slate-350 flex items-center gap-1">
+                  <Music className="w-3 h-3 text-cyan-400" />
+                  Crisp Treble Focus
+                </span>
+                <span className="text-[9px] text-slate-500">
+                  Focuses highs (+7.5dB @ 7.5kHz)
+                </span>
+              </div>
+
+              {/* Hardware-like Toggle Button with indicator LED */}
               <button
-                id="btn-bass-reset"
-                onClick={() => onBassBoostChange(0)}
-                className="hover:text-white transition-colors"
+                id="btn-treble-focus"
+                onClick={() => onTrebleFocusChange(!trebleFocus)}
+                className={`py-1 px-2.5 rounded-xl border font-mono text-[10px] font-bold tracking-wider flex items-center gap-2 transition-all duration-205 ${
+                  trebleFocus
+                    ? "bg-slate-900 border-cyan-500/80 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                    : "bg-slate-900/40 border-slate-800 text-slate-500 hover:border-slate-700"
+                }`}
               >
-                Reset
+                {/* LED STATUS BULB */}
+                <div 
+                  className={`w-2 h-2 rounded-full transition-all ${
+                    trebleFocus
+                      ? "bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse"
+                      : "bg-slate-800"
+                  }`}
+                />
+                {trebleFocus ? "ACTIVE" : "BYPASS"}
               </button>
             </div>
           </div>
 
-          {/* REVERB CHAMBER */}
+          {/* SIMULATED ROOM REVERB CHAMBER */}
           <div className="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-2xl flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-medium text-slate-350">Reverb Wet Mix</span>
@@ -333,9 +432,9 @@ export default function EqualizerPanel({
             </div>
 
             {/* Hall Size Slider inside Reverb Chamber */}
-            <div className="flex flex-col gap-1.5 pt-0.5 border-t border-slate-800/40">
-              <div className="flex items-center justify-between text-[10px] text-slate-450">
-                <span>Room / Hall Size</span>
+            <div className="flex flex-col gap-1.5 pt-0.5">
+              <div className="flex items-center justify-between text-[10px] text-slate-455">
+                <span>Room / Hall Decay Size</span>
                 <span className="font-mono text-[9px]">
                   {reverbSize <= 1.0
                     ? `Studio (${reverbSize.toFixed(1)}s)`
@@ -346,7 +445,7 @@ export default function EqualizerPanel({
               </div>
               <div className="relative w-full h-1.5 bg-slate-800 rounded-full cursor-pointer flex items-center">
                 <div
-                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-505 to-violet-500 rounded-full pointer-events-none animate-pulse"
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full pointer-events-none"
                   style={{ width: `${((reverbSize - 0.5) / 3.5) * 100}%` }}
                 />
                 <input
@@ -364,6 +463,45 @@ export default function EqualizerPanel({
                   className="absolute w-3 h-3 rounded-full bg-white pointer-events-none"
                   style={{ left: `calc(${((reverbSize - 0.5) / 3.5) * 100}% - 6px)` }}
                 />
+              </div>
+            </div>
+
+            {/* Room Reflection Architecture Presets */}
+            <div className="border-t border-slate-800/40 pt-2 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                Room Acoustics Environment
+              </span>
+              
+              <div className="flex flex-col gap-1.5 select-none">
+                {[
+                  { id: "studio", name: "Studio", desc: "Absorptive warm close room", size: 0.8, wet: 0.15 },
+                  { id: "rock", name: "Rock", desc: "Short highly fluttery club", size: 1.3, wet: 0.32 },
+                  { id: "hall", name: "Hall", desc: "Classic performance acoustics", size: 2.0, wet: 0.45 },
+                  { id: "concert", name: "Concert", desc: "Enriched orchestral soundstage", size: 2.6, wet: 0.52 },
+                  { id: "cathedral", name: "Cathedral", desc: "Distant massive hollow arches", size: 3.8, wet: 0.68 },
+                ].map((item) => {
+                  const isCur = reverbEnv === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      id={`btn-env-${item.id}`}
+                      onClick={() => {
+                        onReverbEnvChange(item.id as any);
+                        onReverbSizeChange(item.size);
+                        onReverbWetChange(item.wet);
+                      }}
+                      className={`text-[10px] py-1.5 px-3 rounded-lg font-medium tracking-wide transition-all flex items-center justify-between text-left cursor-pointer ${
+                        isCur
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-bold border border-indigo-400/30"
+                          : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700"
+                      }`}
+                      title={item.desc}
+                    >
+                      <span className="font-semibold">{item.name}</span>
+                      <span className={`text-[8px] font-mono normal-case truncate max-w-[150px] ${isCur ? 'text-indigo-200' : 'text-slate-500'}`}>{item.desc}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
