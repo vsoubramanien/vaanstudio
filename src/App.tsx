@@ -31,6 +31,7 @@ import {
   VolumeX,
   Shuffle,
   Repeat,
+  PlayCircle,
   Smartphone,
   LayoutGrid,
   Music,
@@ -112,6 +113,7 @@ export default function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("all");
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
+  const [autoplayNext, setAutoplayNext] = useState<boolean>(true);
   const [layoutMode, setLayoutMode] = useState<"mobile" | "dashboard">("mobile");
   
   // Equalizer gains corresponding to [40, 125, 400, 1000, 2500, 6000, 15000] Hz
@@ -945,7 +947,8 @@ export default function App() {
       }
     }
 
-    handleTrackSelect(activeQueue[nextIndex].id);
+    const forcePlay = !userTriggered || isPlaying;
+    handleTrackSelect(activeQueue[nextIndex].id, forcePlay);
   };
 
   // Track skipping logic (Backward)
@@ -966,7 +969,7 @@ export default function App() {
       nextIndex = activeQueue.length - 1;
     }
 
-    handleTrackSelect(activeQueue[nextIndex].id);
+    handleTrackSelect(activeQueue[nextIndex].id, isPlaying);
   };
 
   // Quick skipped jump
@@ -983,29 +986,31 @@ export default function App() {
   };
 
   // Handle explicit track selections
-  const handleTrackSelect = (trackId: string) => {
+  const handleTrackSelect = (trackId: string, forcePlay = true) => {
+    const shouldPlay = forcePlay || isPlaying;
     setCurrentTrackId(trackId);
     setCurrentTime(0);
 
-    // Give browser a microsecond to apply src change to the DOM element
-    setTimeout(async () => {
-      if (audioRef.current) {
-        initAudioEngine();
-        
-        // Match duration to media header context
-        if (!isNaN(audioRef.current.duration)) {
-          setDuration(audioRef.current.duration);
-        }
+    if (shouldPlay) {
+      setIsPlaying(true);
+    }
 
-        if (isPlaying) {
-          try {
-            await audioRef.current.play();
-          } catch (e) {
-            console.error(e);
-          }
+    const targetTrack = tracks.find((t) => t.id === trackId);
+    if (audioRef.current && targetTrack) {
+      initAudioEngine();
+      try {
+        // Direct browser load allows play to execute without waiting for React cycle render delays!
+        audioRef.current.src = targetTrack.src || "";
+        audioRef.current.load();
+        if (shouldPlay) {
+          audioRef.current.play().catch((e) => {
+            console.warn("Playback failed inside handleTrackSelect:", e);
+          });
         }
+      } catch (err) {
+        console.error("Failed to load and play in handleTrackSelect:", err);
       }
-    }, 80);
+    }
   };
 
   // Sound ending handler
@@ -1015,8 +1020,14 @@ export default function App() {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch((e) => console.error(e));
       }
-    } else {
+    } else if (autoplayNext) {
       handleNextTrack(false);
+    } else {
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        setCurrentTime(0);
+      }
     }
   };
 
@@ -1353,50 +1364,6 @@ export default function App() {
               <div className="absolute top-[20%] left-[25%] w-96 h-96 rounded-full bg-brand/10 blur-[100px] pointer-events-none z-0" />
               <div className="absolute top-[40%] right-[20%] w-80 h-80 rounded-full bg-brand-light/5 blur-[120px] pointer-events-none z-0" />
 
-              {/* Tablet native internal app header */}
-              <div className="px-6 pt-3 pb-1 flex items-center justify-between shrink-0 relative z-20">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 bg-brand/10 border border-brand/20 px-2 py-0.5 rounded">
-                    <img
-                      src={vaanLogo}
-                      alt="Vaan Logo"
-                      className="w-3.5 h-3.5 object-cover rounded-sm"
-                      referrerPolicy="no-referrer"
-                    />
-                    <span className="text-xs font-bold font-display tracking-tight text-white uppercase">Vaan Player</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-mono tracking-wider select-none">PREMIUM AUDIO DECK</span>
-                </div>
-                
-                {/* Clean App Layout Switcher inside Tablet */}
-                <div className="flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-805 text-[10px]">
-                  <button
-                    id="layout-btn-mobile"
-                    onClick={() => setLayoutMode("mobile")}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-all cursor-pointer font-medium ${
-                      layoutMode === "mobile"
-                        ? "bg-brand text-white shadow-sm font-semibold"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Smartphone className="w-3 h-3" />
-                    <span>Tablet</span>
-                  </button>
-                  <button
-                    id="layout-btn-dashboard"
-                    onClick={() => setLayoutMode("dashboard")}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-all cursor-pointer font-medium ${
-                      layoutMode === "dashboard"
-                        ? "bg-brand text-white shadow-sm font-semibold"
-                        : "text-slate-450 hover:text-white"
-                    }`}
-                  >
-                    <LayoutGrid className="w-3 h-3" />
-                    <span>Studio Grid</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Main Split Grid inside Landscape Tablet */}
               <div className="flex-1 grid grid-cols-12 gap-5 p-4 pb-5 overflow-hidden relative z-10">
                 
@@ -1412,7 +1379,7 @@ export default function App() {
                       }`} />
                       
                       {/* Vinyl body */}
-                      <div className={`relative w-28 h-28 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
+                      <div className={`relative w-36 h-36 rounded-full overflow-hidden border-4 border-slate-900 shadow-2xl shrink-0 ${
                         isPlaying ? "animate-[spin_18s_linear_infinite]" : ""
                       }`}>
                         <img
@@ -1423,9 +1390,17 @@ export default function App() {
                         />
                         {/* Vinyl inner ring texture mask */}
                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.85)_46%,rgba(0,0,0,0.95)_55%,transparent_56%)] pointer-events-none" />
-                        {/* Center spindle */}
-                        <div className="absolute inset-0 margin-auto w-8 h-8 bg-slate-950 border-4 border-slate-900 rounded-full flex items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                          <div className="w-2 h-2 bg-brand rounded-full" />
+                        
+                        {/* Premium Stylized Center Record Label overlay housing Vaan Player */}
+                        <div className="absolute inset-0 margin-auto w-14 h-14 bg-slate-950 border-2 border-slate-800 rounded-full flex flex-col items-center justify-center pointer-events-none left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 shadow-inner z-10 select-none">
+                          <img
+                            src={vaanLogo}
+                            alt="Vaan Logo"
+                            className="w-5 h-5 object-cover rounded-full"
+                            referrerPolicy="no-referrer"
+                          />
+                          <span className="text-[6.5px] text-white/80 font-bold font-display tracking-tight uppercase mt-0.5">Vaan Player</span>
+                          <div className="w-1.5 h-1.5 bg-brand rounded-full mt-0.5 border border-slate-900" />
                         </div>
                       </div>
                     </div>
@@ -1491,19 +1466,33 @@ export default function App() {
                   {/* Media playback primary controllers */}
                   <div className="flex flex-col gap-2 mt-2.5 shrink-0">
                     <div className="flex items-center justify-between px-1">
-                      {/* Shuffle Button */}
-                      <button
-                        id="tablet-shuffle-btn"
-                        onClick={() => setIsShuffle(!isShuffle)}
-                        className={`p-2 rounded-xl transition-all ${
-                          isShuffle
-                            ? "bg-brand/15 text-brand-light font-bold border border-brand/20"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                        title="Shuffle Mode"
-                      >
-                        <Shuffle className="w-4 h-4" />
-                      </button>
+                      {/* Shuffle & Autoplay Control Group */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          id="tablet-shuffle-btn"
+                          onClick={() => setIsShuffle(!isShuffle)}
+                          className={`p-2 rounded-xl transition-all ${
+                            isShuffle
+                              ? "bg-brand/15 text-brand-light font-bold border border-brand/20"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                          title="Shuffle Mode"
+                        >
+                          <Shuffle className="w-4 h-4" />
+                        </button>
+                        <button
+                          id="tablet-autoplay-btn"
+                          onClick={() => setAutoplayNext(!autoplayNext)}
+                          className={`p-2 rounded-xl transition-all flex items-center justify-center ${
+                            autoplayNext
+                              ? "bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/20"
+                              : "text-slate-400 hover:text-white"
+                          }`}
+                          title={`Autoplay queue: ${autoplayNext ? "ON" : "OFF"}`}
+                        >
+                          <PlayCircle className="w-4 h-4" />
+                        </button>
+                      </div>
 
                       <div className="flex items-center gap-2">
                         {/* Fast Rewind */}
@@ -1584,6 +1573,29 @@ export default function App() {
                         )}
                       </button>
                     </div>
+
+                    {/* Active Playlist Constraint Control */}
+                    {activePlaylist && (
+                      <div className="flex items-center justify-between bg-brand/10 border border-brand/20 px-3 py-1.5 rounded-xl text-slate-200 select-none animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="flex h-2 w-2 relative shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-light opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-light"></span>
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[8px] text-slate-400 uppercase tracking-widest leading-none font-bold">Playing Queue</p>
+                            <p className="text-[11px] font-semibold truncate text-brand-light leading-snug">{activePlaylist.name}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setActivePlaylistId(null)}
+                          className="text-[9px] bg-slate-900 hover:bg-slate-800 border border-slate-800/80 hover:border-slate-700 px-2.5 py-0.5 rounded text-slate-300 hover:text-white transition-all cursor-pointer font-bold uppercase tracking-wider"
+                          title="Clear queue restriction and restore full library queue"
+                        >
+                          Restore Library
+                        </button>
+                      </div>
+                    )}
 
                     {/* Master Volume Bar */}
                     <div className="flex items-center gap-2.5 px-3 bg-slate-900/50 py-1.5 rounded-xl border border-slate-800/50">
@@ -2022,19 +2034,33 @@ export default function App() {
 
                 {/* Grid layout for buttons */}
                 <div className="flex items-center justify-between">
-                  {/* Shuffle click */}
-                  <button
-                    id="studio-shuffle-btn"
-                    onClick={() => setIsShuffle(!isShuffle)}
-                    className={`p-2.5 rounded-xl border transition-all ${
-                      isShuffle
-                        ? "bg-brand/15 text-brand-light border-brand/20 font-semibold"
-                        : "text-slate-400 hover:text-white border-transparent"
-                    }`}
-                    title="Toggle Shuffle"
-                  >
-                    <Shuffle className="w-4.5 h-4.5" />
-                  </button>
+                  {/* Shuffle and Autoplay click */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      id="studio-shuffle-btn"
+                      onClick={() => setIsShuffle(!isShuffle)}
+                      className={`p-2.5 rounded-xl border transition-all ${
+                        isShuffle
+                          ? "bg-brand/15 text-brand-light border-brand/20 font-semibold"
+                          : "text-slate-400 hover:text-white border-transparent"
+                      }`}
+                      title="Toggle Shuffle"
+                    >
+                      <Shuffle className="w-4.5 h-4.5" />
+                    </button>
+                    <button
+                      id="studio-autoplay-btn"
+                      onClick={() => setAutoplayNext(!autoplayNext)}
+                      className={`p-2.5 rounded-xl border transition-all flex items-center justify-center ${
+                        autoplayNext
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20 font-semibold"
+                          : "text-slate-400 hover:text-white border-transparent"
+                      }`}
+                      title={`Autoplay queue: ${autoplayNext ? "ON" : "OFF"}`}
+                    >
+                      <PlayCircle className="w-4.5 h-4.5" />
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-2">
                     {/* Fast Rewind */}
