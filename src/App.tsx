@@ -995,22 +995,27 @@ export default function App() {
       setIsPlaying(true);
     }
 
-    const targetTrack = tracks.find((t) => t.id === trackId);
-    if (audioRef.current && targetTrack) {
-      initAudioEngine();
-      try {
-        // Direct browser load allows play to execute without waiting for React cycle render delays!
-        audioRef.current.src = targetTrack.src || "";
-        audioRef.current.load();
-        if (shouldPlay) {
-          audioRef.current.play().catch((e) => {
-            console.warn("Playback failed inside handleTrackSelect:", e);
-          });
+    // Give browser/React a microsecond to apply src change via standard state rendering to the DOM element
+    setTimeout(async () => {
+      if (audioRef.current) {
+        initAudioEngine();
+        
+        // Match duration to media header context if possible
+        if (!isNaN(audioRef.current.duration)) {
+          setDuration(audioRef.current.duration);
         }
-      } catch (err) {
-        console.error("Failed to load and play in handleTrackSelect:", err);
+
+        if (shouldPlay) {
+          try {
+            await audioRef.current.play();
+          } catch (e) {
+            console.warn("Playback failed inside handleTrackSelect setTimeout:", e);
+          }
+        } else {
+          audioRef.current.pause();
+        }
       }
-    }
+    }, 120);
   };
 
   // Sound ending handler
