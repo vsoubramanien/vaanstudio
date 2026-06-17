@@ -267,7 +267,7 @@ export default function TrackList({
                 <p className="text-[10px] text-slate-500 text-center max-w-[200px]">Reset the queue filter to view the library, then click "+" to add songs!</p>
               </div>
             ) : (
-              visibleTracks.map((track) => {
+              visibleTracks.map((track, idx) => {
                 const isActive = track.id === currentTrackId;
                 return (
                   <div
@@ -331,7 +331,7 @@ export default function TrackList({
                         className={`p-1 rounded-lg border text-slate-450 hover:text-slate-200 transition-all cursor-pointer ${
                           trackPlaylistDropdownId === track.id
                             ? "bg-brand/15 border-brand/50 text-brand-light"
-                            : "bg-slate-800/50 border-slate-700/40 hover:bg-slate-750 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            : "bg-slate-800/50 border-slate-700/40 hover:bg-slate-750"
                         }`}
                         title="Add to Playlist"
                       >
@@ -342,7 +342,11 @@ export default function TrackList({
                       {trackPlaylistDropdownId === track.id && (
                         <div 
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 bottom-8 z-50 w-44 bg-slate-950 border border-slate-800 p-1 rounded-xl shadow-2xl flex flex-col backdrop-blur-xl animate-in fade-in slide-in-from-bottom-1 duration-150"
+                          className={`absolute right-0 z-50 w-44 bg-slate-950 border border-slate-800 p-1 rounded-xl shadow-2xl flex flex-col backdrop-blur-xl animate-in fade-in duration-150 ${
+                            idx === 0
+                              ? "top-8 mt-1 slide-in-from-top-1"
+                              : "bottom-8 slide-in-from-bottom-1"
+                          }`}
                         >
                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-2 py-1 select-none border-b border-slate-900 mb-1 leading-none">Add to Playlist</p>
                           {playlists.length === 0 ? (
@@ -378,7 +382,7 @@ export default function TrackList({
                             e.stopPropagation();
                             onTrackDelete(track.id);
                           }}
-                          className="p-1.5 rounded-lg bg-slate-805 hover:bg-rose-950 hover:text-rose-450 border border-slate-700/40 text-slate-400 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          className="p-1.5 rounded-lg bg-slate-805 hover:bg-rose-950 hover:text-rose-450 border border-slate-700/40 text-slate-400 transition-all cursor-pointer"
                           title="Remove Song"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
