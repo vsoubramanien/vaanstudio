@@ -142,6 +142,105 @@ Return a valid JSON array of up to 3 objects matching the exact required schema.
     }
   });
 
+  // API endpoint for generating a sky-themed ambient playlist
+  app.post("/api/generate-sky-playlist", async (req, res) => {
+    const { mood, customInput } = req.body;
+    if (!mood && !customInput) {
+      return res.status(400).json({ error: "A sky mood selection or custom input is required." });
+    }
+
+    const moodQuery = customInput ? customInput.trim() : mood;
+
+    try {
+      console.log(`Generating AI Sky-Mood playlist for query: "${moodQuery}"`);
+
+      const prompt = `You are VaanMusicPlayer's AI Sky-Mood Playlist Engine. The name "Vaan" means Sky in Tamil.
+The user wants to generate a highly atmospheric audio playlist inspired by the sky concept and mood: "${moodQuery}".
+
+Generate a tailored list of exactly 5 beautiful, thematic ambient, chill, indie, or Tamil-crossover song concepts. Create unique and elegant titles, artists, and descriptions suited for this specific sky atmosphere. For each song, include high-quality plain-text lyrics and 8-15 line detailed time-synchronized lyrics (syncedLyrics with timed line objects matching the emotional tempo of the verses).
+
+Assign each track a matching visual cover category representing a sky state from this list: "starry_sky", "blue_clouds", "sunset_vibe", "neon_night", "aurora_sky", "lofi_rain", "acoustic_fields", "cosmic_nebula". Pick the one that fits best.
+
+Return a valid JSON array of exactly 5 elements matching the exact required schema. Do not include markdown tags like \`\`\`json outside the actual payload return.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            description: "A list of exactly 5 matching song tracks",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING, description: "The song title" },
+                artist: { type: Type.STRING, description: "Artist or band name" },
+                album: { type: Type.STRING, description: "Album name (or Single / Year)" },
+                duration: { type: Type.INTEGER, description: "Duration in seconds (e.g. 150 to 245)" },
+                visualTheme: { type: Type.STRING, description: "One of: starry_sky, blue_clouds, sunset_vibe, neon_night, aurora_sky, lofi_rain, acoustic_fields, cosmic_nebula" },
+                lyrics: { type: Type.STRING, description: "Full plain text lyrics" },
+                syncedLyrics: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      time: { type: Type.INTEGER, description: "Time timestamp in seconds when this line occurs" },
+                      text: { type: Type.STRING, description: "The lyric text line" }
+                    },
+                    required: ["time", "text"]
+                  }
+                }
+              },
+              required: ["title", "artist", "album", "duration", "visualTheme", "lyrics", "syncedLyrics"]
+            }
+          }
+        }
+      });
+
+      const responseText = response.text || "[]";
+      let rawResults = JSON.parse(responseText);
+
+      if (!Array.isArray(rawResults)) {
+        rawResults = [rawResults];
+      }
+
+      // Map dynamic songs to player properties including SoundHelix audio stream and coverURL
+      const songs = rawResults.map((song: any, index: number) => {
+        const title = song.title || "Celestial Echo";
+        const artist = song.artist || "Vaan Ambient Orchestra";
+        const album = song.album || "Atmospheric Resonance";
+        const duration = song.duration || 180;
+
+        // Assign a deterministic track index from SoundHelix (channels 1-16) based on title
+        const hashVal = hashString(title);
+        const songIndex = (Math.abs(hashVal) % 16) + 1;
+        const src = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${songIndex}.mp3`;
+
+        const visualTheme = song.visualTheme || "starry_sky";
+        const coverUrl = THEME_COVERS[visualTheme] || THEME_COVERS.starry_sky;
+
+        return {
+          id: `ai-mood-${Date.now()}-${index}`,
+          title,
+          artist,
+          album,
+          duration,
+          src,
+          coverUrl,
+          lyrics: song.lyrics,
+          syncedLyrics: song.syncedLyrics,
+          isUploaded: true
+        };
+      });
+
+      res.json(songs);
+    } catch (err: any) {
+      console.error("Gemini Sky-Mood playlist generator error:", err);
+      res.status(500).json({ error: "Failed to generate AI Sky-Mood playlist." });
+    }
+  });
+
   // Mount Vite middleware or Static asset directory depending on production mode
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

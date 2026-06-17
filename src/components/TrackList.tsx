@@ -13,7 +13,8 @@ import {
   ArrowLeft,
   Check,
   Plus,
-  FolderPlus
+  FolderPlus,
+  Sparkles
 } from "lucide-react";
 
 interface TrackListProps {
@@ -32,6 +33,7 @@ interface TrackListProps {
   onTrackTogglePlaylist: (trackId: string, playlistId: string) => void;
   activePlaylistId: string | null;
   onActivePlaylistChange: (playlistId: string | null) => void;
+  onGenerateSkyPlaylist?: (playlistName: string, tracks: Track[]) => void;
 }
 
 export default function TrackList({
@@ -49,14 +51,130 @@ export default function TrackList({
   onTrackTogglePlaylist,
   activePlaylistId,
   onActivePlaylistChange,
+  onGenerateSkyPlaylist,
 }: TrackListProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<"tracks" | "playlists">("tracks");
+  const [activeSubTab, setActiveSubTab] = useState<"tracks" | "playlists" | "sky-mood">("tracks");
   const [viewedPlaylistId, setViewedPlaylistId] = useState<string | null>(null);
   const [trackPlaylistDropdownId, setTrackPlaylistDropdownId] = useState<string | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
+
+  const [selectedSkyPreset, setSelectedSkyPreset] = useState<string>("starry_night");
+  const [customSkyText, setCustomSkyText] = useState<string>("");
+  const [isGeneratingPlaylist, setIsGeneratingPlaylist] = useState<boolean>(false);
+  const [skyError, setSkyError] = useState<string | null>(null);
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState<number>(0);
+
+  const SKY_PRESETS = [
+    {
+      id: "starry_night",
+      name: "Starry Sky",
+      emoji: "🌌",
+      desc: "Dreamy ambient mood & stellar night vibe",
+      bgClass: "from-indigo-950/40 to-purple-950/40 border-purple-500/20",
+    },
+    {
+      id: "sunset_vibe",
+      name: "Sunset Glow",
+      emoji: "🌅",
+      desc: "Warm relaxed rhythms & acoustic twilight orange",
+      bgClass: "from-amber-955/40 to-rose-955/40 border-rose-500/20",
+    },
+    {
+      id: "blue_clouds",
+      name: "Clear Blue",
+      emoji: "🌤️",
+      desc: "Uplifting clarity & energetic daylight frequencies",
+      bgClass: "from-sky-955/40 to-blue-900/40 border-sky-500/20",
+    },
+    {
+      id: "lofi_rain",
+      name: "Lofi Rain",
+      emoji: "🌧️",
+      desc: "Cozy showers, dusty beats & fireplace static",
+      bgClass: "from-slate-900/60 to-blue-955/40 border-slate-700/20",
+    },
+    {
+      id: "aurora_sky",
+      name: "Aurora Sky",
+      emoji: "💚",
+      desc: "Ethereal, mystical glowing green & violet pulses",
+      bgClass: "from-emerald-955/40 to-violet-955/40 border-emerald-500/20",
+    },
+    {
+      id: "neon_night",
+      name: "Neon Horizon",
+      emoji: "🌆",
+      desc: "Synthwaves, midnight drives & cyberpunk skylines",
+      bgClass: "from-fuchsia-955/40 to-slate-900/50 border-fuchsia-500/20",
+    }
+  ];
+
+  const LOADING_PHRASES = [
+    "Painting your thematic sky-mood canvas...",
+    "Retrieving astral-harmonic frequency bands...",
+    "Casting deep atmospheric melodies...",
+    "Sculpting synced verses with lyric keys...",
+    "Formulating Vaan audio resonance signals..."
+  ];
+
+  useEffect(() => {
+    let interval: any;
+    if (isGeneratingPlaylist) {
+      interval = setInterval(() => {
+        setLoadingPhraseIndex((prev) => (prev + 1) % LOADING_PHRASES.length);
+      }, 2500);
+    }
+    return () => clearInterval(interval);
+  }, [isGeneratingPlaylist]);
+
+  const handleGenerateSkyPlaylistSubmit = async () => {
+    setIsGeneratingPlaylist(true);
+    setSkyError(null);
+    setLoadingPhraseIndex(0);
+
+    const preset = SKY_PRESETS.find((p) => p.id === selectedSkyPreset);
+    const chosenPresetName = preset ? preset.name : "Custom Mood";
+    
+    const customText = customSkyText.trim();
+    const playlistName = customText 
+      ? `✨ ${customText.slice(0, 18)}${customText.length > 18 ? "..." : ""}`
+      : `${preset?.emoji || "🌌"} ${chosenPresetName}`;
+
+    try {
+      const response = await fetch("/api/generate-sky-playlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mood: chosenPresetName,
+          customInput: customSkyText
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to reach Gemini playlist engine");
+      }
+
+      const tracks = await response.json();
+      if (!Array.isArray(tracks) || tracks.length === 0) {
+        throw new Error("No atmospheric songs generated");
+      }
+
+      if (onGenerateSkyPlaylist) {
+        onGenerateSkyPlaylist(playlistName, tracks);
+      }
+      
+      setCustomSkyText("");
+      setActiveSubTab("playlists");
+    } catch (err: any) {
+      console.error(err);
+      setSkyError(err.message || "Something went wrong while connecting with Gemini. Please try again.");
+    } finally {
+      setIsGeneratingPlaylist(false);
+    }
+  };
 
   // Format seconds to mm:ss
   const formatTime = (secs: number) => {
@@ -199,25 +317,25 @@ export default function TrackList({
         </div>
       </div>
 
-      {/* Sub tabs: Library vs Playlists */}
+      {/* Sub tabs: Library vs Playlists vs Sky Moon AI */}
       <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/60 text-xs shrink-0 select-none">
         <button
           onClick={() => {
             setActiveSubTab("tracks");
             setViewedPlaylistId(null);
           }}
-          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 font-semibold transition-all cursor-pointer ${
             activeSubTab === "tracks"
               ? "bg-brand/10 border border-brand/20 text-brand-light font-bold"
               : "border border-transparent text-slate-400 hover:text-slate-350"
           }`}
         >
           <Music className="w-3.5 h-3.5" />
-          <span>Song Library</span>
+          <span>Library</span>
         </button>
         <button
           onClick={() => setActiveSubTab("playlists")}
-          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1.5 font-semibold transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 font-semibold transition-all cursor-pointer relative ${
             activeSubTab === "playlists"
               ? "bg-brand/10 border border-brand/20 text-brand-light font-bold"
               : "border border-transparent text-slate-400 hover:text-slate-350"
@@ -231,10 +349,28 @@ export default function TrackList({
             </span>
           )}
         </button>
+        <button
+          onClick={() => {
+            setActiveSubTab("sky-mood");
+            setViewedPlaylistId(null);
+          }}
+          className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 font-semibold transition-all cursor-pointer relative ${
+            activeSubTab === "sky-mood"
+              ? "bg-gradient-to-r from-brand/20 to-indigo-505/15 border border-brand/30 text-brand-light font-bold shadow shadow-brand/10"
+              : "border border-transparent text-slate-400 hover:text-slate-350"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-brand" />
+          <span>Sky Mood</span>
+          <span className="absolute top-0.5 right-1 flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-light opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-brand-light"></span>
+          </span>
+        </button>
       </div>
 
       {/* RENDER ACTIVE TAB */}
-      {activeSubTab === "tracks" ? (
+      {activeSubTab === "tracks" && (
         <div className="flex-1 flex flex-col gap-3 min-h-0">
           {/* Active Playlist Filter Banner */}
           {activePlaylist && (
@@ -397,7 +533,9 @@ export default function TrackList({
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeSubTab === "playlists" && (
         /* PLAYLISTS TAB VIEW */
         <div className="flex-1 flex flex-col gap-3 min-h-0">
           {viewedPlaylistId === null ? (
@@ -563,6 +701,111 @@ export default function TrackList({
                 )}
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {activeSubTab === "sky-mood" && (
+        /* SKY MOOD AI VIEW */
+        <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-y-auto pr-1 scrollbar-thin">
+          {isGeneratingPlaylist ? (
+            <div className="flex-1 flex flex-col justify-center items-center py-10 px-4 text-center min-h-[300px] relative overflow-hidden rounded-3xl bg-slate-950/65 border border-slate-800/40">
+              <div className="absolute inset-0 bg-radial-gradient from-brand/10 via-transparent to-transparent opacity-80 animate-pulse pointer-events-none" />
+              
+              <div className="relative mb-6">
+                <div className="absolute -inset-4 rounded-full bg-brand/15 blur-xl animate-pulse" />
+                <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-brand/35 shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+                  <Sparkles className="w-8 h-8 text-brand-light animate-pulse" />
+                </div>
+              </div>
+
+              <h4 className="text-sm font-bold tracking-wider text-slate-100 uppercase mb-2">
+                Coaxing Vaan Celestial Winds
+              </h4>
+              <p className="text-xs text-brand-light font-mono font-medium max-w-xs animate-pulse h-4 truncate">
+                {LOADING_PHRASES[loadingPhraseIndex]}
+              </p>
+              
+              <p className="text-[10px] text-slate-500 max-w-[220px] mt-4 leading-relaxed">
+                Gemini is composing custom track titles, writing synchronized lyrics, and assigning atmospheric high-res photography.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3.5">
+              <div className="bg-gradient-to-r from-brand/10 to-indigo-500/5 border border-brand/20 p-3 rounded-2xl">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-brand-light shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-bold text-brand-light uppercase tracking-wide">Vaan Sky-Mood AI Engine</h4>
+                    <p className="text-[10.5px] text-slate-400 mt-0.5 leading-relaxed">
+                      Select or request a sky atmosphere. Gemini will formulate 5 custom ambient-themed songs with timed synced lyrics.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {skyError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-300 p-3 rounded-xl text-[11px] leading-relaxed">
+                  ⚠️ {skyError}
+                </div>
+              )}
+
+              {/* Sky Presets Grid */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Choose a Celestial Sky</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {SKY_PRESETS.map((preset) => {
+                    const isSelected = selectedSkyPreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setSelectedSkyPreset(preset.id)}
+                        className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all cursor-pointer relative overflow-hidden bg-gradient-to-br ${preset.bgClass} ${
+                          isSelected
+                            ? "border-brand-light/75 ring-1 ring-brand-light/30 shadow-md shadow-brand/15 -translate-y-[1px]"
+                            : "hover:border-slate-800"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-base select-none">{preset.emoji}</span>
+                          {isSelected && (
+                            <span className="h-4 w-4 rounded-full bg-brand text-slate-950 flex items-center justify-center p-0 text-[10px]">
+                              <Check className="w-2.5 h-2.5 stroke-[3px]" />
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold text-slate-200 mt-1 leading-none">{preset.name}</span>
+                        <span className="text-[9px] text-slate-400 leading-tight line-clamp-1 mt-0.5">{preset.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Input */}
+              <div className="flex flex-col gap-1.5 mt-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">Or Customize the Sky Mood</label>
+                <textarea
+                  placeholder="e.g. Rainy sunset in Kodai, soft lo-fi piano..."
+                  value={customSkyText}
+                  onChange={(e) => setCustomSkyText(e.target.value)}
+                  rows={2}
+                  className="w-full bg-slate-950 border border-slate-800/85 rounded-2xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 transition-all resize-none"
+                />
+              </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={handleGenerateSkyPlaylistSubmit}
+                disabled={isGeneratingPlaylist}
+                className="w-full bg-gradient-to-r from-brand to-indigo-600 hover:from-brand-light hover:to-indigo-500 text-slate-950 font-bold text-xs py-3 rounded-2xl transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer shadow border-none shadow-brand/10 hover:shadow-brand/20 active:scale-[0.99] mt-1 shrink-0"
+              >
+                <Sparkles className="w-4 h-4 fill-slate-950 stroke-none animate-pulse" />
+                <span>Cast Celestial Songs</span>
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -3,6 +3,7 @@ import { SAMPLE_TRACKS } from "./data/sampleTracks";
 import { Track, Playlist } from "./types";
 import vaanLogo from "./assets/images/vaan_logo_1780250156730.png";
 import AudioVisualizer from "./components/AudioVisualizer";
+import AudioReactiveBackdrop from "./components/AudioReactiveBackdrop";
 import EqualizerPanel from "./components/EqualizerPanel";
 import SyncedLyrics from "./components/SyncedLyrics";
 import TrackList from "./components/TrackList";
@@ -1246,6 +1247,43 @@ export default function App() {
     );
   };
 
+  const handleGenerateSkyPlaylist = (playlistName: string, generatedTracks: Track[]) => {
+    // 1. Add all new tracks to standard tracks state (keeping unique IDs)
+    setTracks((prev) => {
+      const existingIds = new Set(prev.map((t) => t.id));
+      const uniqueNewTracks = generatedTracks.filter((t) => !existingIds.has(t.id));
+      return [...prev, ...uniqueNewTracks];
+    });
+
+    // 2. Persist tracks to IndexedDB
+    for (const track of generatedTracks) {
+      saveTrackToDB(track).catch((err) =>
+        console.error("Failed to save generated AI track to DB:", err)
+      );
+    }
+
+    // 3. Create a custom playlist containing these newly discovered atmospheric songs
+    const playlistId = `playlist-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newPlaylist: Playlist = {
+      id: playlistId,
+      name: playlistName,
+      trackIds: generatedTracks.map((t) => t.id),
+    };
+
+    setPlaylists((prev) => [...prev, newPlaylist]);
+    savePlaylistToDB(newPlaylist).catch((err) =>
+      console.error("Failed to save generated AI playlist to DB:", err)
+    );
+
+    // 4. Set as active playlist and view it immediately
+    setActivePlaylistId(playlistId);
+    
+    // 5. Automatically play the very first track of our new personalized ambient selection
+    if (generatedTracks.length > 0) {
+      handleTrackSelect(generatedTracks[0].id);
+    }
+  };
+
   const handlePlaylistDelete = (id: string) => {
     setPlaylists((prev) => prev.filter((p) => p.id !== id));
     deletePlaylistFromDB(id).catch((err) =>
@@ -1328,8 +1366,16 @@ export default function App() {
   };
 
   return (
-    <div className={`h-screen bg-slate-950 text-slate-100 flex flex-col font-sans transition-all duration-700 bg-gradient-to-b ${getAmbientBgColor()} p-3 md:p-4.5 overflow-hidden`}>
+    <div className={`h-screen bg-slate-950 text-slate-100 flex flex-col font-sans transition-all duration-700 bg-gradient-to-b ${getAmbientBgColor()} p-3 md:p-4.5 overflow-hidden relative`}>
       
+      {/* Audio Reactive Full-Viewport Background Canvas Backdrop */}
+      <AudioReactiveBackdrop
+        analyser={analyser}
+        isPlaying={isPlaying}
+        currentTrackId={currentTrackId}
+        currentTrackTitle={currentTrack?.title}
+      />
+
       {/* Invisible HTML5 Audio back-end engine */}
       <audio
         ref={audioRef}
@@ -1361,10 +1407,10 @@ export default function App() {
           /* ========================================================= */
           /* 📱 CUSTOM TABLET INTERFACE VIEWPORT                       */
           /* ========================================================= */
-          <div className="relative w-full h-full flex-1 min-h-0 rounded-3xl border border-slate-800/80 bg-slate-950 shadow-2xl flex flex-col overflow-hidden mx-auto animate-fade-in">
+          <div className="relative w-full h-full flex-1 min-h-0 rounded-3xl border border-slate-800/80 bg-slate-950/45 md:bg-slate-950/50 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden mx-auto animate-fade-in relative z-10">
 
             {/* Tablet Sub-Screen Content Area */}
-            <div className="flex-1 flex flex-col pt-2 relative overflow-hidden bg-slate-950">
+            <div className="flex-1 flex flex-col pt-2 relative overflow-hidden bg-slate-950/30">
               {/* Dynamic ambient halo circle glow behind tablet desktop */}
               <div className="absolute top-[20%] left-[25%] w-96 h-96 rounded-full bg-brand/10 blur-[100px] pointer-events-none z-0" />
               <div className="absolute top-[40%] right-[20%] w-80 h-80 rounded-full bg-brand-light/5 blur-[120px] pointer-events-none z-0" />
@@ -1726,6 +1772,7 @@ export default function App() {
                           onTrackTogglePlaylist={handleTrackTogglePlaylist}
                           activePlaylistId={activePlaylistId}
                           onActivePlaylistChange={setActivePlaylistId}
+                          onGenerateSkyPlaylist={handleGenerateSkyPlaylist}
                         />
                       </div>
                     )}
@@ -2198,6 +2245,7 @@ export default function App() {
                   onTrackTogglePlaylist={handleTrackTogglePlaylist}
                   activePlaylistId={activePlaylistId}
                   onActivePlaylistChange={setActivePlaylistId}
+                  onGenerateSkyPlaylist={handleGenerateSkyPlaylist}
                 />
               </div>
             </div>
